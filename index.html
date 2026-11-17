@@ -106,6 +106,9 @@ nav.tabs a{display:flex;flex-direction:column;align-items:center;gap:3px;padding
 nav.tabs a svg{width:22px;height:22px}
 nav.tabs a[aria-current="page"]{color:var(--accent)}
 .plan-row{display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr auto;gap:6px;align-items:end}
+.meter{height:12px;background:var(--line);border-radius:6px;overflow:hidden}
+.meter div{height:100%;background:var(--accent);border-radius:6px;min-width:3px}
+.big{font-family:var(--display);font-weight:700;font-size:24px;letter-spacing:-.01em}
 .callout{background:var(--accent-wash);border-radius:10px;padding:10px 12px;font-size:13.5px}
 hr{border:0;border-top:1px solid var(--line);margin:2px 0;width:100%}
 @media (prefers-reduced-motion:no-preference){.hbar .fill{transition:width .3s}}
@@ -137,8 +140,9 @@ const DEFAULTS={
     supplyName:"MC Squared (supply)", deliveryName:"ComEd (delivery, time of day)",
     supply:{kind:"flat",rate:9.5,other:9.5,periods:[]},
     delivery:{kind:"tod",rate:6,other:5.5,periods:[{label:"Overnight",from:0,to:6,rate:3.5},{label:"Peak",from:13,to:19,rate:12}]}},
-  range:"30", theme:"system"
+  range:"30", theme:"system", payoffGoal:13000
 };
+let editId=null;
 let S=load();
 function load(){try{const r=JSON.parse(localStorage.getItem(KEY));if(r&&r.vehicles)return Object.assign(structuredClone(DEFAULTS),r)}catch(e){}return structuredClone(DEFAULTS)}
 function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
@@ -223,6 +227,14 @@ function summary(){
   }
   return {list,miles,cost,kwh,est,steps};
 }
+function ledger(v){
+  const all=sessions(),months={};let gas=0,cost=0;
+  all.forEach((s,i)=>{const mi=i>0?milesBetween(all[i-1],s).mi:0,g=fuelCost(mi,v.mpg,S.gasPrice),c=sessionCost(s);gas+=g;cost+=c;
+    const k=s.date.slice(0,7),m=months[k]||(months[k]={mi:0,g:0,c:0});m.mi+=mi;m.g+=g;m.c+=c});
+  const days=all.length>1?(new Date(all[all.length-1].date)-new Date(all[0].date))/864e5:0;
+  return {months,gas,cost,saved:gas-cost,days};
+}
+const monthName=k=>new Date(k+"-15T12:00").toLocaleDateString(undefined,{month:"short",year:"numeric"});
 const veh=()=>S.vehicles.find(v=>v.id===S.activeVehicle)||S.vehicles[0];
 
 /* ---------- charts ---------- */
@@ -266,6 +278,18 @@ function vSavings(){
   const rows=[{n:"Model Y charging",c:m.cost,tesla:true},...S.vehicles.map(x=>({n:x.name+" · "+x.mpg+" mpg",c:fuelCost(m.miles,x.mpg,S.gasPrice),sel:x.id===v.id}))];
   const max=Math.max(...rows.map(r=>r.c),1);
   let cg=0,cc=0;const pts=m.steps.map(st=>{cg+=fuelCost(st.mi,v.mpg,S.gasPrice);cc+=st.c;return {x:fmtD(st.s.date),y:cg-cc,tip:`${fmtD(st.s.date)}\nSaved so far: ${$0(cg-cc)}`}});
+  const L=ledger(v),goal=+S.payoffGoal||0,paid=Math.max(0,L.saved),perDay=L.days>=14&&L.saved>0?L.saved/L.days:0;
+  const eta=perDay&&paid<goal?new Date(Date.now()+(goal-paid)/perDay*864e5):null;
+  const payoff=goal>0?`<section class="card"><h2>Paying back the gap</h2>
+    <div><span class="big">${$0(paid)}</span> <span class="sub">of ${$0(goal)} covered by fuel savings since you started logging</span></div>
+    <div class="meter" role="img" aria-label="${Math.min(100,Math.round(paid/goal*100))} percent paid back"><div style="width:${Math.min(100,paid/goal*100).toFixed(1)}%"></div></div>
+    <p class="sub">${paid>=goal?"The gap is fully covered.":eta?`${(paid/goal*100).toFixed(1)}% so far. At this pace, about ${$0(perDay*30.4)} a month, the gap is covered around <b>${eta.toLocaleDateString(undefined,{month:"long",year:"numeric"})}</b>.`:"A projected date appears after two weeks of logged sessions with savings."}</p>
+    <p class="note">Compared with the ${esc(v.name)}. Change the amount in <a href="#setup" style="color:inherit">Setup</a>.</p></section>`:"";
+  const mk=Object.keys(L.months).sort().reverse();
+  const monthly=`<section class="card"><h2>Month by month</h2><div class="scroll"><table><thead><tr><th>Month</th><th>Miles</th><th>Charging</th><th>Gas</th><th>Saved</th></tr></thead><tbody>
+    ${mk.map(k=>{const m=L.months[k];return `<tr><td>${monthName(k)}</td><td>${n0(m.mi)}</td><td>${$0(m.c)}</td><td>${$0(m.g)}</td><td><b>${$0(m.g-m.c)}</b></td></tr>`}).join("")||'<tr><td colspan="5">No sessions logged yet.</td></tr>'}
+    ${mk.length>1?`<tr><td><b>All time</b></td><td>${n0(mk.reduce((a,k)=>a+L.months[k].mi,0))}</td><td>${$0(L.cost)}</td><td>${$0(L.gas)}</td><td><b>${$0(L.saved)}</b></td></tr>`:""}
+    </tbody></table></div><p class="note">Gas is what the ${esc(v.name)} would have used for the same miles at ${$2(S.gasPrice)} a gallon.</p></section>`;
   return `
   <section class="card">
     <div class="row" style="justify-content:space-between">${rangeBtns()}</div>
@@ -283,6 +307,7 @@ function vSavings(){
     ${rows.map(r=>`<div class="hbar"><span>${esc(r.n)}</span><div class="track"><div class="fill" style="width:${(r.c/max*100).toFixed(1)}%;background:var(${r.tesla?"--accent":r.sel?"--neutral-bar-strong":"--neutral-bar"})" data-tip="${esc(r.n)}\n${$2(r.c)}"></div></div><span class="val">${$0(r.c)}</span></div>`).join("")}
     <div class="row"><span class="sub">Compare against:</span><div class="chips">${S.vehicles.map(x=>`<button data-act="veh" data-v="${esc(x.id)}" aria-pressed="${x.id===v.id}">${esc(x.name)}</button>`).join("")}</div><a class="sub" href="#setup">Add a vehicle</a></div>
   </section>
+  ${payoff}${monthly}
   <section class="card"><h2>Savings adding up, compared with the ${esc(v.name)}</h2>${lineChart(pts,$0,"Running savings in dollars")}</section>`;
 }
 
@@ -291,6 +316,13 @@ function vCharging(){
   m.list.forEach(s=>{const b=by[s.type]||by.other;b.n++;b.kwh+=+s.kwh;b.c+=sessionCost(s)});
   const used=Object.keys(TYPES).filter(k=>by[k].n);
   const today=iso(new Date());
+  const ed=S.useSample?null:(S.sessions.find(s=>s.id===editId)||null),fv=(k,d="")=>ed&&ed[k]!=null?ed[k]:d;
+  const away=m.list.filter(s=>s.type!=="home"),w=cheapestWindow(),aKwh=away.reduce((a,s)=>a+ +s.kwh,0),aCost=away.reduce((a,s)=>a+sessionCost(s),0),hCost=away.reduce((a,s)=>a+homeCost(+s.kwh,w?w.from:23),0),mx=Math.max(aCost,hCost,1);
+  const whatif=away.length?`<section class="card"><h2>If that charging had been at home</h2>
+    <p class="sub">${n0(aKwh)} kWh came from away-from-home charging. At your home rate it would have cost <b>${$0(hCost)}</b> instead of <b>${$0(aCost)}</b>${aCost>hCost?`, a difference of <b>${$0(aCost-hCost)}</b>`:""}.</p>
+    <div class="hbar"><span>Paid away from home</span><div class="track"><div class="fill" style="width:${(aCost/mx*100).toFixed(1)}%;background:var(--neutral-bar-strong)" data-tip="Paid away from home\n${$2(aCost)}"></div></div><span class="val">${$0(aCost)}</span></div>
+    <div class="hbar"><span>Same energy at home</span><div class="track"><div class="fill" style="width:${(hCost/mx*100).toFixed(1)}%;background:var(--accent)" data-tip="Same energy at home\n${$2(hCost)}"></div></div><span class="val">${$0(hCost)}</span></div>
+    <p class="note">Road trips still need Superchargers, so treat this as the most you could have saved.</p></section>`:"";
   return `
   <section class="card">
     <div class="row" style="justify-content:space-between">${rangeBtns()}</div>
@@ -306,24 +338,25 @@ function vCharging(){
     ${used.map(k=>`<tr><td><i class="dot" style="background:var(${TYPES[k].c})"></i>${TYPES[k].label}</td><td>${m.kwh?Math.round(by[k].kwh/m.kwh*100):0}%</td><td>${n0(by[k].kwh)}</td><td>${$0(by[k].c)}</td><td>${by[k].kwh?(by[k].c/by[k].kwh*100).toFixed(1):"0"}</td></tr>`).join("")||'<tr><td colspan="5">No sessions in this range.</td></tr>'}
     </tbody></table></div>
   </section>
-  <section class="card"><h2>Add a charging session</h2>
+  ${whatif}
+  <section class="card" id="formCard"><h2>${ed?"Edit this session":"Add a charging session"}</h2>
     ${S.useSample?'<p class="sub">You are looking at sample data. Adding a session switches to your own log.</p>':""}
     <form id="addForm" class="grid2 grid3">
-      <label class="f">Date<input id="f-date" type="date" value="${today}" required></label>
-      <label class="f">Start hour<select id="f-hour">${[...Array(24)].map((_,h)=>`<option value="${h}"${h===23?" selected":""}>${hr(h)}</option>`).join("")}</select></label>
-      <label class="f">Place<select id="f-type">${Object.keys(TYPES).map(k=>`<option value="${k}">${TYPES[k].label}</option>`).join("")}</select></label>
-      <label class="f">kWh added<input id="f-kwh" type="number" step="0.1" min="0" inputmode="decimal" required></label>
-      <label class="f">Cost in $ (blank = use rates)<input id="f-cost" type="number" step="0.01" min="0" inputmode="decimal"></label>
-      <label class="f">Odometer<input id="f-odo" type="number" step="1" min="0" inputmode="numeric"></label>
-      <label class="f">Battery % at start<input id="f-start" type="number" min="0" max="100" inputmode="numeric"></label>
-      <label class="f">Battery % at end<input id="f-end" type="number" min="0" max="100" inputmode="numeric"></label>
-      <div style="display:flex;align-items:end"><button class="primary" type="submit">Save session</button></div>
+      <label class="f">Date<input id="f-date" type="date" value="${esc(fv("date",today))}" required></label>
+      <label class="f">Start hour<select id="f-hour">${[...Array(24)].map((_,h)=>`<option value="${h}"${h===+fv("hour",23)?" selected":""}>${hr(h)}</option>`).join("")}</select></label>
+      <label class="f">Place<select id="f-type">${Object.keys(TYPES).map(k=>`<option value="${k}"${k===fv("type","home")?" selected":""}>${TYPES[k].label}</option>`).join("")}</select></label>
+      <label class="f">kWh added<input id="f-kwh" type="number" step="0.1" min="0" inputmode="decimal" value="${fv("kwh")}" required></label>
+      <label class="f">Cost in $ (blank = use rates)<input id="f-cost" type="number" step="0.01" min="0" inputmode="decimal" value="${fv("cost")}"></label>
+      <label class="f">Odometer<input id="f-odo" type="number" step="1" min="0" inputmode="numeric" value="${fv("odo")}"></label>
+      <label class="f">Battery % at start<input id="f-start" type="number" min="0" max="100" inputmode="numeric" value="${fv("startPct")}"></label>
+      <label class="f">Battery % at end<input id="f-end" type="number" min="0" max="100" inputmode="numeric" value="${fv("endPct")}"></label>
+      <div class="row" style="align-items:end"><button class="primary" type="submit">${ed?"Save changes":"Save session"}</button>${ed?'<button type="button" data-act="cancelEdit">Cancel</button>':""}</div>
     </form>
   </section>
   <section class="card"><h2>Sessions</h2><div>
     ${[...m.list].reverse().map(s=>`<div class="sess"><div class="a"><b><i class="dot" style="background:var(${(TYPES[s.type]||TYPES.other).c})"></i>${(TYPES[s.type]||TYPES.other).label} · ${fmtD(s.date)}</b>
       <span>${(+s.kwh).toFixed(1)} kWh${s.startPct!=null&&s.endPct!=null?` · ${s.startPct}% to ${s.endPct}%`:""}${s.odo?` · ${n0(s.odo)} mi`:""}</span></div>
-      <div class="b"><b>${$2(sessionCost(s))}</b>${S.useSample?"":`<br><button class="quiet" data-act="del" data-v="${esc(s.id)}" aria-label="Delete session from ${fmtD(s.date)}">Delete</button>`}</div></div>`).join("")||'<p class="sub">Nothing logged in this range yet.</p>'}
+      <div class="b"><b>${$2(sessionCost(s))}</b>${S.useSample?"":`<br><button class="quiet" data-act="edit" data-v="${esc(s.id)}" aria-label="Edit session from ${fmtD(s.date)}">Edit</button><button class="quiet" data-act="del" data-v="${esc(s.id)}" aria-label="Delete session from ${fmtD(s.date)}">Delete</button>`}</div></div>`).join("")||'<p class="sub">Nothing logged in this range yet.</p>'}
   </div></section>`;
 }
 
@@ -395,7 +428,8 @@ function vSetup(){
   <section class="card"><h2>Comparison vehicles</h2>
     ${S.vehicles.map((v,i)=>`<div class="row"><label class="f" style="flex:2 1 150px">Name<input data-veh="${i}.name" value="${esc(v.name)}"></label><label class="f" style="flex:1 1 80px">MPG<input type="number" step="0.1" min="1" data-veh="${i}.mpg" value="${v.mpg}"></label>${S.vehicles.length>1?`<button class="quiet" data-act="vdel" data-v="${i}" aria-label="Remove ${esc(v.name)}">Remove</button>`:""}</div>`).join("")}
     <div class="row"><button data-act="vadd">Add a vehicle</button></div>
-    <label class="f" style="max-width:220px">Gas price, $ per gallon<input type="number" step="0.01" data-top="gasPrice" value="${S.gasPrice}"></label>
+    <div class="grid2"><label class="f">Gas price, $ per gallon<input type="number" step="0.01" data-top="gasPrice" value="${S.gasPrice}"></label>
+    <label class="f">Gap to pay back with fuel savings, $ (0 hides it)<input type="number" step="100" min="0" data-top="payoffGoal" value="${S.payoffGoal}"></label></div>
   </section>
   <section class="card"><h2>Car and charger</h2>
     <div class="grid2">
@@ -441,7 +475,9 @@ document.addEventListener("click",e=>{
   else if(a==="pdel")S.plan[k].periods.splice(+v,1);
   else if(a==="vadd"){const id="v"+Date.now();S.vehicles.push({id,name:"New vehicle",mpg:25})}
   else if(a==="vdel"){const [g]=S.vehicles.splice(+v,1);if(g.id===S.activeVehicle)S.activeVehicle=S.vehicles[0].id}
-  else if(a==="del")S.sessions=S.sessions.filter(s=>s.id!==v);
+  else if(a==="del"){S.sessions=S.sessions.filter(s=>s.id!==v);if(editId===v)editId=null}
+  else if(a==="edit"){editId=v;render();const f=document.getElementById("formCard");if(f)f.scrollIntoView({block:"start"});return}
+  else if(a==="cancelEdit")editId=null;
   else if(a==="export"){const t=JSON.stringify(S);const box=document.getElementById("xbox"),msg=document.getElementById("xmsg");box.value=t;
     (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>msg.textContent="Copied.",()=>{box.select();msg.textContent="Copy the text in the box below."});return}
   else if(a==="import"){const msg=document.getElementById("xmsg");try{const r=JSON.parse(document.getElementById("xbox").value);if(!r||!Array.isArray(r.vehicles)||!Array.isArray(r.sessions))throw 0;S=Object.assign(structuredClone(DEFAULTS),r);save();applyTheme();render();document.getElementById("xmsg").textContent="Loaded."}catch(_){msg.textContent="That text is not Tesla Ledger data. Copy it again from the other phone and paste the whole thing."}return}
@@ -458,8 +494,10 @@ document.addEventListener("change",e=>{
 document.addEventListener("submit",e=>{
   if(e.target.id!=="addForm")return;e.preventDefault();const g=id=>document.getElementById(id).value;
   const num=x=>x===""?null:+x;
-  S.sessions.push({id:"u"+Date.now(),date:g("f-date"),hour:+g("f-hour"),type:g("f-type"),kwh:+g("f-kwh"),cost:num(g("f-cost")),odo:num(g("f-odo")),startPct:num(g("f-start")),endPct:num(g("f-end"))});
-  S.useSample=false;S.range="all";save();render();
+  const rec={date:g("f-date"),hour:+g("f-hour"),type:g("f-type"),kwh:+g("f-kwh"),cost:num(g("f-cost")),odo:num(g("f-odo")),startPct:num(g("f-start")),endPct:num(g("f-end"))};
+  const old=S.useSample?null:S.sessions.find(s=>s.id===editId);
+  if(old)Object.assign(old,rec);else{S.sessions.push(Object.assign({id:"u"+Date.now()},rec));S.range="all"}
+  editId=null;S.useSample=false;save();render();
 });
 /* tooltips: hover on desktop, tap on touch */
 const tip=document.getElementById("tip");

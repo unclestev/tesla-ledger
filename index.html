@@ -234,6 +234,23 @@ function ledger(v){
   const days=all.length>1?(new Date(all[all.length-1].date)-new Date(all[0].date))/864e5:0;
   return {months,gas,cost,saved:gas-cost,days};
 }
+/* MPG equivalent. Each leg is the drive between two charges, using odometer miles.
+   Energy counts from the wall (battery energy used plus charging loss); 33.7 kWh equals one gallon of gas.
+   Cost mpg prices that energy at the rate paid at the charge that supplied it. */
+const KWH_GAL=33.7;
+function legs(){
+  const all=sessions(),out=[];
+  for(let i=1;i<all.length;i++){const a=all[i-1],s=all[i];if(!a.odo||!s.odo||s.odo<=a.odo)continue;
+    const mi=s.odo-a.odo,known=a.endPct!=null&&s.startPct!=null&&+a.endPct>+s.startPct;
+    const wall=known?(a.endPct-s.startPct)/100*S.packKwh/(1-S.lossPct/100):+s.kwh;if(!(wall>0))continue;
+    const rate=+a.kwh>0?sessionCost(a)/+a.kwh:0;
+    out.push({s,mi,wall,est:!known,mpge:mi*KWH_GAL/wall,cost:rate>0?wall*rate:null,costMpg:rate>0?mi/(wall*rate)*S.gasPrice:null})}
+  return out;
+}
+function legAgg(ls){
+  const mi=ls.reduce((a,l)=>a+l.mi,0),wall=ls.reduce((a,l)=>a+l.wall,0),c=ls.filter(l=>l.cost!=null),cm=c.reduce((a,l)=>a+l.mi,0),cc=c.reduce((a,l)=>a+l.cost,0);
+  return {n:ls.length,mpge:wall?mi*KWH_GAL/wall:0,costMpg:cc?cm/cc*S.gasPrice:0};
+}
 const monthName=k=>new Date(k+"-15T12:00").toLocaleDateString(undefined,{month:"short",year:"numeric"});
 const veh=()=>S.vehicles.find(v=>v.id===S.activeVehicle)||S.vehicles[0];
 
@@ -278,6 +295,7 @@ function vSavings(){
   const rows=[{n:"Model Y charging",c:m.cost,tesla:true},...S.vehicles.map(x=>({n:x.name+" · "+x.mpg+" mpg",c:fuelCost(m.miles,x.mpg,S.gasPrice),sel:x.id===v.id}))];
   const max=Math.max(...rows.map(r=>r.c),1);
   let cg=0,cc=0;const pts=m.steps.map(st=>{cg+=fuelCost(st.mi,v.mpg,S.gasPrice);cc+=st.c;return {x:fmtD(st.s.date),y:cg-cc,tip:`${fmtD(st.s.date)}\nSaved so far: ${$0(cg-cc)}`}});
+  const LG=legs(),inR=new Set(m.list),K=legAgg(LG.filter(l=>inR.has(l.s)));
   const L=ledger(v),goal=+S.payoffGoal||0,paid=Math.max(0,L.saved),perDay=L.days>=14&&L.saved>0?L.saved/L.days:0;
   const eta=perDay&&paid<goal?new Date(Date.now()+(goal-paid)/perDay*864e5):null;
   const payoff=goal>0?`<section class="card"><h2>Paying back the gap</h2>
@@ -286,9 +304,9 @@ function vSavings(){
     <p class="sub">${paid>=goal?"The gap is fully covered.":eta?`${(paid/goal*100).toFixed(1)}% so far. At this pace, about ${$0(perDay*30.4)} a month, the gap is covered around <b>${eta.toLocaleDateString(undefined,{month:"long",year:"numeric"})}</b>.`:"A projected date appears after two weeks of logged sessions with savings."}</p>
     <p class="note">Compared with the ${esc(v.name)}. Change the amount in <a href="#setup" style="color:inherit">Setup</a>.</p></section>`:"";
   const mk=Object.keys(L.months).sort().reverse();
-  const monthly=`<section class="card"><h2>Month by month</h2><div class="scroll"><table><thead><tr><th>Month</th><th>Miles</th><th>Charging</th><th>Gas</th><th>Saved</th></tr></thead><tbody>
-    ${mk.map(k=>{const m=L.months[k];return `<tr><td>${monthName(k)}</td><td>${n0(m.mi)}</td><td>${$0(m.c)}</td><td>${$0(m.g)}</td><td><b>${$0(m.g-m.c)}</b></td></tr>`}).join("")||'<tr><td colspan="5">No sessions logged yet.</td></tr>'}
-    ${mk.length>1?`<tr><td><b>All time</b></td><td>${n0(mk.reduce((a,k)=>a+L.months[k].mi,0))}</td><td>${$0(L.cost)}</td><td>${$0(L.gas)}</td><td><b>${$0(L.saved)}</b></td></tr>`:""}
+  const monthly=`<section class="card"><h2>Month by month</h2><div class="scroll"><table><thead><tr><th>Month</th><th>Miles</th><th>MPGe</th><th>Charging</th><th>Gas</th><th>Saved</th></tr></thead><tbody>
+    ${mk.map(k=>{const m=L.months[k];return `<tr><td>${monthName(k)}</td><td>${n0(m.mi)}</td><td>${(x=>x.n?Math.round(x.mpge):"–")(legAgg(LG.filter(l=>l.s.date.slice(0,7)===k)))}</td><td>${$0(m.c)}</td><td>${$0(m.g)}</td><td><b>${$0(m.g-m.c)}</b></td></tr>`}).join("")||'<tr><td colspan="6">No sessions logged yet.</td></tr>'}
+    ${mk.length>1?`<tr><td><b>All time</b></td><td>${n0(mk.reduce((a,k)=>a+L.months[k].mi,0))}</td><td>${LG.length?Math.round(legAgg(LG).mpge):"–"}</td><td>${$0(L.cost)}</td><td>${$0(L.gas)}</td><td><b>${$0(L.saved)}</b></td></tr>`:""}
     </tbody></table></div><p class="note">Gas is what the ${esc(v.name)} would have used for the same miles at ${$2(S.gasPrice)} a gallon.</p></section>`;
   return `
   <section class="card">
@@ -300,6 +318,8 @@ function vSavings(){
       <div class="tile"><b>${$0(m.cost)}</b><span>spent on charging</span></div>
       <div class="tile"><b>${$0(gas)}</b><span>gas at ${v.mpg} mpg, ${$2(S.gasPrice)}/gal</span></div>
       <div class="tile"><b>${m.miles?(m.cost/m.miles*100).toFixed(1):"0"}¢ <small style="font-size:13px;color:var(--muted)">vs ${(S.gasPrice/v.mpg*100).toFixed(1)}¢</small></b><span>cost per mile</span></div>
+      <div class="tile"><b>${K.n?Math.round(K.mpge):"–"} <small style="font-size:13px;color:var(--muted)">MPGe</small></b><span>energy efficiency</span></div>
+      <div class="tile"><b>${K.costMpg?Math.round(K.costMpg):"–"} <small style="font-size:13px;color:var(--muted)">mpg</small></b><span>what a gas car needs to match your cost</span></div>
     </div>
     <p class="note">Miles come from odometer readings between charges. A charge without one is estimated from its kWh.</p>
   </section>
@@ -315,7 +335,7 @@ function vCharging(){
   const m=summary(),by={};for(const k in TYPES)by[k]={n:0,kwh:0,c:0};
   m.list.forEach(s=>{const b=by[s.type]||by.other;b.n++;b.kwh+=+s.kwh;b.c+=sessionCost(s)});
   const used=Object.keys(TYPES).filter(k=>by[k].n);
-  const today=iso(new Date());
+  const today=iso(new Date()),LGm=new Map(legs().map(l=>[l.s,l]));
   const ed=S.useSample?null:(S.sessions.find(s=>s.id===editId)||null),fv=(k,d="")=>ed&&ed[k]!=null?ed[k]:d;
   const away=m.list.filter(s=>s.type!=="home"),w=cheapestWindow(),aKwh=away.reduce((a,s)=>a+ +s.kwh,0),aCost=away.reduce((a,s)=>a+sessionCost(s),0),hCost=away.reduce((a,s)=>a+homeCost(+s.kwh,w?w.from:23),0),mx=Math.max(aCost,hCost,1);
   const whatif=away.length?`<section class="card"><h2>If that charging had been at home</h2>
@@ -355,7 +375,7 @@ function vCharging(){
   </section>
   <section class="card"><h2>Sessions</h2><div>
     ${[...m.list].reverse().map(s=>`<div class="sess"><div class="a"><b><i class="dot" style="background:var(${(TYPES[s.type]||TYPES.other).c})"></i>${(TYPES[s.type]||TYPES.other).label} · ${fmtD(s.date)}</b>
-      <span>${(+s.kwh).toFixed(1)} kWh${s.startPct!=null&&s.endPct!=null?` · ${s.startPct}% to ${s.endPct}%`:""}${s.odo?` · ${n0(s.odo)} mi`:""}</span></div>
+      <span>${(+s.kwh).toFixed(1)} kWh${s.startPct!=null&&s.endPct!=null?` · ${s.startPct}% to ${s.endPct}%`:""}${s.odo?` · ${n0(s.odo)} mi`:""}</span>${(l=>l?`<span>Since last charge: ${n0(l.mi)} mi · <b style="font-size:inherit;color:var(--ink)">${Math.round(l.mpge)} MPGe${l.est?" (est.)":""}</b>${l.costMpg?` · costs like ${Math.round(l.costMpg)} mpg`:""}</span>`:"")(LGm.get(s))}</div>
       <div class="b"><b>${$2(sessionCost(s))}</b>${S.useSample?"":`<br><button class="quiet" data-act="edit" data-v="${esc(s.id)}" aria-label="Edit session from ${fmtD(s.date)}">Edit</button><button class="quiet" data-act="del" data-v="${esc(s.id)}" aria-label="Delete session from ${fmtD(s.date)}">Delete</button>`}</div></div>`).join("")||'<p class="sub">Nothing logged in this range yet.</p>'}
   </div></section>`;
 }
@@ -403,7 +423,19 @@ function vBattery(){
   const avg=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:0;
   const buckets=[["Up to 80%",ends.filter(e=>e<=80).length],["81 to 90%",ends.filter(e=>e>80&&e<=90).length],["91 to 100%",ends.filter(e=>e>90).length]];
   const bm=Math.max(...buckets.map(b=>b[1]),1),wh=tm?tu*1000/tm:0;
+  const LG=legs(),KA=legAgg(LG),K30=legAgg(LG.slice(-5));
+  const mp=LG.map(l=>({x:fmtD(l.s.date),y:l.mpge,tip:`${fmtD(l.s.date)}\n${Math.round(l.mpge)} MPGe over ${n0(l.mi)} miles${l.costMpg?"\nCosts like "+Math.round(l.costMpg)+" mpg":""}`}));
   return `
+  <section class="card"><h2>MPG equivalent</h2>
+    <div class="tiles">
+      <div class="tile"><b>${KA.n?Math.round(KA.mpge):"–"}</b><span>MPGe, all time</span></div>
+      <div class="tile"><b>${K30.n?Math.round(K30.mpge):"–"}</b><span>MPGe, last ${Math.min(5,LG.length)||""} drives between charges</span></div>
+      <div class="tile"><b>${KA.costMpg?Math.round(KA.costMpg):"–"}</b><span>mpg a gas car needs to match your cost</span></div>
+      <div class="tile"><b>${veh().mpg}</b><span>mpg, ${esc(veh().name)}</span></div>
+    </div>
+    ${lineChart(mp,v=>Math.round(v),"MPGe for each drive between charges",false)}
+    <p class="note">MPGe for each drive between charges, from odometer miles. It counts energy from the wall and treats 33.7 kWh as one gallon of gas. Higher is better. The cost figure uses the price paid at the charge that supplied the energy and gas at ${$2(S.gasPrice)}.</p>
+  </section>
   <section class="card"><h2>Efficiency</h2>
     <div class="tiles">
       <div class="tile"><b>${wh?Math.round(wh):"–"}</b><span>Wh per mile, average</span></div>

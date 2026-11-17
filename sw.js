@@ -1,6 +1,6 @@
 // Tesla Ledger offline support. Bump VERSION whenever index.html changes so phones pick up the update.
-const VERSION = "ledger-v1";
-const SHELL = ["./", "index.html", "manifest.json", "icon-192.png", "icon-512.png", "apple-touch-icon.png"];
+const VERSION = "ledger-v2";
+const SHELL = ["./", "index.html", "manifest.json", "favicon.svg", "icon-192.png", "icon-512.png", "apple-touch-icon.png"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));

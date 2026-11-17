@@ -4,62 +4,65 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#0d0e11">
+<meta name="theme-color" id="themeColor" content="#f1ebdf">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Tesla Ledger">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
-<link rel="icon" href="icon-192.png">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <title>Tesla Ledger</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,500..800&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-/* Layout idea: a phone-first ledger. One summary figure per view, then the detail that explains it. Bottom tab bar. */
+/* Layout idea: a paper trip ledger by day, a night dashboard after dark. Column-header labels, ruled rows, and an accountant's double rule under the total. */
 :root{
-  --page:#f4f5f7; --surface:#fcfcfb; --ink:#0b0d12; --ink-2:#4c515c; --muted:#868a94;
-  --line:#e0e2e7; --axis:#c2c6cf; --accent:#2a78d6; --accent-soft:#9ec5f4; --accent-wash:#e6f0fc;
-  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --neutral-bar:#b9bdc7; --neutral-bar-strong:#6f7480;
-  --good:#006300; --bad:#b42323; --warn-bg:#fff4d6; --warn-ink:#5c4300;
-  --display:"Archivo","Arial Narrow",system-ui,sans-serif; --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --page:#f1ebdf; --surface:#fbf7ee; --ink:#1a1c20; --ink-2:#575349; --muted:#777264;
+  --line:#e1d9c8; --axis:#c9c0ad; --accent:#2a78d6; --accent-soft:#9ec5f4; --accent-wash:#e3ecf5;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --neutral-bar:#c4bcab; --neutral-bar-strong:#77705f;
+  --good:#006300; --bad:#b42323; --warn-bg:#f7e7b8; --warn-ink:#5c4300; --mark-bg:#14213a; --mark-bar:#f1ebdf;
+  --shadow:0 1px 0 rgba(60,45,10,.05),0 6px 18px -12px rgba(60,45,10,.25);
+  --display:"Bricolage Grotesque","Arial Narrow",system-ui,sans-serif; --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
   --r:14px;
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
-    color-scheme:dark;
-    --page:#0d0e11; --surface:#1a1b1e; --ink:#f0f0ee; --ink-2:#c1c4cb; --muted:#898c95;
-    --line:#2b2d32; --axis:#3a3c42; --accent:#3987e5; --accent-soft:#184f95; --accent-wash:#16263c;
-    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --neutral-bar:#4a4d55; --neutral-bar-strong:#8b8f99;
-    --good:#0ca30c; --bad:#e66767; --warn-bg:#3a2f10; --warn-ink:#f3d98a;
+  color-scheme:dark;
+  --page:#0b0e13; --surface:#141920; --ink:#eef0f2; --ink-2:#bfc5cf; --muted:#868d99;
+  --line:#252c37; --axis:#364050; --accent:#3987e5; --accent-soft:#184f95; --accent-wash:#13233a;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --neutral-bar:#3f4856; --neutral-bar-strong:#8a93a1;
+  --good:#0ca30c; --bad:#e66767; --warn-bg:#352b0f; --warn-ink:#f3d98a; --mark-bg:#eef0f2; --mark-bar:#141920; --shadow:none;
   }
 }
 :root[data-theme="dark"]{
   color-scheme:dark;
-  --page:#0d0e11; --surface:#1a1b1e; --ink:#f0f0ee; --ink-2:#c1c4cb; --muted:#898c95;
-  --line:#2b2d32; --axis:#3a3c42; --accent:#3987e5; --accent-soft:#184f95; --accent-wash:#16263c;
-  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --neutral-bar:#4a4d55; --neutral-bar-strong:#8b8f99;
-  --good:#0ca30c; --bad:#e66767; --warn-bg:#3a2f10; --warn-ink:#f3d98a;
+  --page:#0b0e13; --surface:#141920; --ink:#eef0f2; --ink-2:#bfc5cf; --muted:#868d99;
+  --line:#252c37; --axis:#364050; --accent:#3987e5; --accent-soft:#184f95; --accent-wash:#13233a;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --neutral-bar:#3f4856; --neutral-bar-strong:#8a93a1;
+  --good:#0ca30c; --bad:#e66767; --warn-bg:#352b0f; --warn-ink:#f3d98a; --mark-bg:#eef0f2; --mark-bar:#141920; --shadow:none;
 }
 *{box-sizing:border-box}
 html,body{margin:0}
-body{background:var(--page);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45;padding-top:env(safe-area-inset-top);padding-bottom:calc(84px + env(safe-area-inset-bottom))}
+body{background:var(--page) repeating-linear-gradient(transparent 0 31px,color-mix(in srgb,var(--line) 45%,transparent) 31px 32px);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45;padding-top:env(safe-area-inset-top);padding-bottom:calc(84px + env(safe-area-inset-bottom))}
 h1,h2,h3{font-family:var(--display);margin:0;text-wrap:balance}
 .wrap{max-width:720px;margin:0 auto;padding:0 16px;display:flex;flex-direction:column;gap:14px}
 header.top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 0 2px;flex-wrap:wrap}
-header.top h1{font-size:22px;font-weight:800;font-stretch:112%;letter-spacing:.01em}
+header.top h1{font-size:23px;font-weight:800;letter-spacing:-.01em;display:flex;align-items:center;gap:9px}
+header.top h1 svg{width:28px;height:28px;flex:none}
 .pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;color:var(--ink-2);border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:4px 10px}
 .pill i{width:8px;height:8px;border-radius:50%;background:var(--muted);display:inline-block}
 .banner{background:var(--warn-bg);color:var(--warn-ink);border-radius:var(--r);padding:10px 12px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;font-size:13.5px}
-.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;display:flex;flex-direction:column;gap:12px}
-.card h2{font-size:15px;font-weight:700;font-stretch:105%}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:16px;display:flex;flex-direction:column;gap:12px}
+.card h2{font-family:var(--body);font-size:12px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-2)}
 .sub{color:var(--ink-2);font-size:13px;margin:0}
 .note{color:var(--muted);font-size:12.5px;margin:0}
 .hero{display:flex;flex-direction:column;gap:2px}
 .hero .label{color:var(--ink-2);font-size:13.5px}
-.hero .fig{font-family:var(--display);font-weight:800;font-stretch:88%;font-size:64px;line-height:1;letter-spacing:-.01em}
+.hero .fig{font-family:var(--display);font-weight:800;font-size:66px;line-height:1.05;letter-spacing:-.03em;align-self:flex-start;border-bottom:4px double currentColor;padding-bottom:2px}
 .hero .fig.good{color:var(--good)} .hero .fig.bad{color:var(--bad)}
 .tiles{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
 @media(min-width:560px){.tiles{grid-template-columns:repeat(4,1fr)}}
 .tile{border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:2px;min-width:0}
-.tile b{font-family:var(--display);font-size:22px;font-weight:700;font-stretch:92%}
+.tile b{font-family:var(--display);font-size:22px;font-weight:700;letter-spacing:-.01em}
 .tile span{font-size:12.5px;color:var(--ink-2)}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .chips{display:flex;gap:6px;flex-wrap:wrap}
@@ -85,7 +88,7 @@ td{padding:8px 4px;border-bottom:1px solid var(--line);text-align:right;font-var
 th:first-child,td:first-child{text-align:left}
 .dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:7px;vertical-align:baseline}
 .scroll{overflow-x:auto}
-.sess{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);align-items:center}
+.sess{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px dashed var(--axis);align-items:center}
 .sess:last-child{border-bottom:0}
 .sess .a{display:flex;flex-direction:column;gap:1px;min-width:0}
 .sess .a b{font-weight:600;font-size:14px}
@@ -111,7 +114,7 @@ hr{border:0;border-top:1px solid var(--line);margin:2px 0;width:100%}
 <body>
 <div class="wrap">
   <header class="top">
-    <h1>Tesla Ledger</h1>
+    <h1><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="15" fill="var(--mark-bg)"/><g fill="var(--mark-bar)" opacity=".55"><rect x="11" y="38" width="8" height="15" rx="2"/><rect x="23" y="30" width="8" height="23" rx="2"/><rect x="35" y="21" width="8" height="32" rx="2"/></g><path d="M39 7 22 36h11l-5 21 21-31H37l6-19z" fill="var(--accent)"/></svg>Tesla Ledger</h1>
     <span class="pill"><i></i>Car not connected yet</span>
   </header>
   <div id="banner"></div>
@@ -134,12 +137,20 @@ const DEFAULTS={
     supplyName:"MC Squared (supply)", deliveryName:"ComEd (delivery, time of day)",
     supply:{kind:"flat",rate:9.5,other:9.5,periods:[]},
     delivery:{kind:"tod",rate:6,other:5.5,periods:[{label:"Overnight",from:0,to:6,rate:3.5},{label:"Peak",from:13,to:19,rate:12}]}},
-  range:"30"
+  range:"30", theme:"system"
 };
 let S=load();
 function load(){try{const r=JSON.parse(localStorage.getItem(KEY));if(r&&r.vehicles)return Object.assign(structuredClone(DEFAULTS),r)}catch(e){}return structuredClone(DEFAULTS)}
 function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
 
+/* ---------- theme: follows the device unless Light or Dark is chosen in Setup ---------- */
+const HOST_THEME=document.documentElement.getAttribute("data-theme");
+function applyTheme(){
+  const r=document.documentElement,t=S.theme;
+  if(t==="light"||t==="dark")r.setAttribute("data-theme",t);
+  else if(HOST_THEME)r.setAttribute("data-theme",HOST_THEME);else r.removeAttribute("data-theme");
+  const m=document.getElementById("themeColor");if(m)m.setAttribute("content",getComputedStyle(r).getPropertyValue("--page").trim());
+}
 /* ---------- helpers ---------- */
 const TYPES={home:{label:"Home",c:"--s1"},supercharger:{label:"Supercharger",c:"--s2"},work:{label:"Work",c:"--s3"},other:{label:"Other",c:"--s4"}};
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -378,6 +389,9 @@ function vBattery(){
 
 function vSetup(){
   return `
+  <section class="card"><h2>Appearance</h2>
+    <div class="chips" role="group" aria-label="Theme">${[["system","Match device"],["light","Light"],["dark","Dark"]].map(([k,l])=>`<button data-act="theme" data-v="${k}" aria-pressed="${(S.theme||"system")===k}">${l}</button>`).join("")}</div>
+  </section>
   <section class="card"><h2>Comparison vehicles</h2>
     ${S.vehicles.map((v,i)=>`<div class="row"><label class="f" style="flex:2 1 150px">Name<input data-veh="${i}.name" value="${esc(v.name)}"></label><label class="f" style="flex:1 1 80px">MPG<input type="number" step="0.1" min="1" data-veh="${i}.mpg" value="${v.mpg}"></label>${S.vehicles.length>1?`<button class="quiet" data-act="vdel" data-v="${i}" aria-label="Remove ${esc(v.name)}">Remove</button>`:""}</div>`).join("")}
     <div class="row"><button data-act="vadd">Add a vehicle</button></div>
@@ -420,6 +434,7 @@ document.addEventListener("click",e=>{
   if(a==="range")S.range=v;
   else if(a==="veh")S.activeVehicle=v;
   else if(a==="sample")S.useSample=!S.useSample;
+  else if(a==="theme"){S.theme=v;applyTheme()}
   else if(a==="mode")S.plan.mode=v;
   else if(a==="ckind")S.plan[k].kind=v;
   else if(a==="padd")S.plan[k].periods.push({label:"New period",from:9,to:13,rate:S.plan[k].other});
@@ -429,7 +444,7 @@ document.addEventListener("click",e=>{
   else if(a==="del")S.sessions=S.sessions.filter(s=>s.id!==v);
   else if(a==="export"){const t=JSON.stringify(S);const box=document.getElementById("xbox"),msg=document.getElementById("xmsg");box.value=t;
     (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>msg.textContent="Copied.",()=>{box.select();msg.textContent="Copy the text in the box below."});return}
-  else if(a==="import"){const msg=document.getElementById("xmsg");try{const r=JSON.parse(document.getElementById("xbox").value);if(!r||!Array.isArray(r.vehicles)||!Array.isArray(r.sessions))throw 0;S=Object.assign(structuredClone(DEFAULTS),r);save();render();document.getElementById("xmsg").textContent="Loaded."}catch(_){msg.textContent="That text is not Tesla Ledger data. Copy it again from the other phone and paste the whole thing."}return}
+  else if(a==="import"){const msg=document.getElementById("xmsg");try{const r=JSON.parse(document.getElementById("xbox").value);if(!r||!Array.isArray(r.vehicles)||!Array.isArray(r.sessions))throw 0;S=Object.assign(structuredClone(DEFAULTS),r);save();applyTheme();render();document.getElementById("xmsg").textContent="Loaded."}catch(_){msg.textContent="That text is not Tesla Ledger data. Copy it again from the other phone and paste the whole thing."}return}
   save();render();
 });
 document.addEventListener("change",e=>{
@@ -454,7 +469,8 @@ document.addEventListener("pointermove",e=>{const el=e.target.closest&&e.target.
 document.addEventListener("pointerdown",e=>{const el=e.target.closest&&e.target.closest("[data-tip]");if(el)showTip(el,e.clientX,e.clientY);else tip.style.display="none"});
 addEventListener("scroll",()=>tip.style.display="none",{passive:true});
 addEventListener("hashchange",()=>{render();scrollTo(0,0)});
-render();
+try{matchMedia("(prefers-color-scheme: dark)").addEventListener("change",applyTheme)}catch(e){}
+applyTheme();render();
 if("serviceWorker" in navigator&&location.protocol==="https:"){addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}))}
 </script>
 </body>

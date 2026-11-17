@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0d0e11">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Tesla Ledger">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png">
+<title>Tesla Ledger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,500..800&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: a phone-first ledger. One summary figure per view, then the detail that explains it. Bottom tab bar. */
+:root{
+  --page:#f4f5f7; --surface:#fcfcfb; --ink:#0b0d12; --ink-2:#4c515c; --muted:#868a94;
+  --line:#e0e2e7; --axis:#c2c6cf; --accent:#2a78d6; --accent-soft:#9ec5f4; --accent-wash:#e6f0fc;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --neutral-bar:#b9bdc7; --neutral-bar-strong:#6f7480;
+  --good:#006300; --bad:#b42323; --warn-bg:#fff4d6; --warn-ink:#5c4300;
+  --display:"Archivo","Arial Narrow",system-ui,sans-serif; --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --r:14px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --page:#0d0e11; --surface:#1a1b1e; --ink:#f0f0ee; --ink-2:#c1c4cb; --muted:#898c95;
+    --line:#2b2d32; --axis:#3a3c42; --accent:#3987e5; --accent-soft:#184f95; --accent-wash:#16263c;
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --neutral-bar:#4a4d55; --neutral-bar-strong:#8b8f99;
+    --good:#0ca30c; --bad:#e66767; --warn-bg:#3a2f10; --warn-ink:#f3d98a;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --page:#0d0e11; --surface:#1a1b1e; --ink:#f0f0ee; --ink-2:#c1c4cb; --muted:#898c95;
+  --line:#2b2d32; --axis:#3a3c42; --accent:#3987e5; --accent-soft:#184f95; --accent-wash:#16263c;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --neutral-bar:#4a4d55; --neutral-bar-strong:#8b8f99;
+  --good:#0ca30c; --bad:#e66767; --warn-bg:#3a2f10; --warn-ink:#f3d98a;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--page);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45;padding-top:env(safe-area-inset-top);padding-bottom:calc(84px + env(safe-area-inset-bottom))}
+h1,h2,h3{font-family:var(--display);margin:0;text-wrap:balance}
+.wrap{max-width:720px;margin:0 auto;padding:0 16px;display:flex;flex-direction:column;gap:14px}
+header.top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 0 2px;flex-wrap:wrap}
+header.top h1{font-size:22px;font-weight:800;font-stretch:112%;letter-spacing:.01em}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;color:var(--ink-2);border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:4px 10px}
+.pill i{width:8px;height:8px;border-radius:50%;background:var(--muted);display:inline-block}
+.banner{background:var(--warn-bg);color:var(--warn-ink);border-radius:var(--r);padding:10px 12px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;font-size:13.5px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;display:flex;flex-direction:column;gap:12px}
+.card h2{font-size:15px;font-weight:700;font-stretch:105%}
+.sub{color:var(--ink-2);font-size:13px;margin:0}
+.note{color:var(--muted);font-size:12.5px;margin:0}
+.hero{display:flex;flex-direction:column;gap:2px}
+.hero .label{color:var(--ink-2);font-size:13.5px}
+.hero .fig{font-family:var(--display);font-weight:800;font-stretch:88%;font-size:64px;line-height:1;letter-spacing:-.01em}
+.hero .fig.good{color:var(--good)} .hero .fig.bad{color:var(--bad)}
+.tiles{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+@media(min-width:560px){.tiles{grid-template-columns:repeat(4,1fr)}}
+.tile{border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.tile b{font-family:var(--display);font-size:22px;font-weight:700;font-stretch:92%}
+.tile span{font-size:12.5px;color:var(--ink-2)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+button,.btn{font:inherit;cursor:pointer;border-radius:999px;border:1px solid var(--axis);background:var(--surface);color:var(--ink);padding:7px 13px;font-size:13.5px;font-weight:500}
+button:hover{border-color:var(--ink-2)}
+button[aria-pressed="true"]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button.quiet{border-color:transparent;color:var(--ink-2);padding:6px 8px}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+input,select,textarea{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--axis);border-radius:8px;padding:8px 10px;width:100%;min-width:0}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--ink-2);min-width:0}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+@media(min-width:560px){.grid3{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.hbar{display:grid;grid-template-columns:minmax(90px,34%) 1fr auto;gap:10px;align-items:center;font-size:13.5px}
+.hbar .track{height:14px;display:flex}
+.hbar .fill{height:14px;border-radius:0 4px 4px 0;min-width:2px}
+.hbar .val{font-variant-numeric:tabular-nums;font-weight:600}
+.stack{display:flex;gap:2px;height:18px}
+.stack div{border-radius:3px;min-width:3px}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{font-weight:500;color:var(--ink-2);text-align:right;padding:6px 4px;border-bottom:1px solid var(--line);font-size:12.5px}
+td{padding:8px 4px;border-bottom:1px solid var(--line);text-align:right;font-variant-numeric:tabular-nums}
+th:first-child,td:first-child{text-align:left}
+.dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:7px;vertical-align:baseline}
+.scroll{overflow-x:auto}
+.sess{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);align-items:center}
+.sess:last-child{border-bottom:0}
+.sess .a{display:flex;flex-direction:column;gap:1px;min-width:0}
+.sess .a b{font-weight:600;font-size:14px}
+.sess .a span{font-size:12.5px;color:var(--ink-2)}
+.sess .b{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.sess .b b{font-family:var(--display);font-size:16px}
+svg{display:block;width:100%;height:auto}
+svg text{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:11px;fill:var(--muted)}
+svg .lbl{fill:var(--ink);font-weight:600;font-size:12px}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;color:var(--ink-2)}
+#tip{position:fixed;z-index:20;pointer-events:none;background:var(--ink);color:var(--surface);font-size:12.5px;padding:6px 9px;border-radius:8px;max-width:240px;display:none;white-space:pre-line}
+nav.tabs{position:fixed;left:0;right:0;bottom:0;padding-bottom:env(safe-area-inset-bottom);background:var(--surface);border-top:1px solid var(--line);z-index:10}
+nav.tabs .in{max-width:720px;margin:0 auto;display:grid;grid-template-columns:repeat(5,1fr)}
+nav.tabs a{display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 2px 12px;color:var(--muted);text-decoration:none;font-size:11.5px;font-weight:500}
+nav.tabs a svg{width:22px;height:22px}
+nav.tabs a[aria-current="page"]{color:var(--accent)}
+.plan-row{display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr auto;gap:6px;align-items:end}
+.callout{background:var(--accent-wash);border-radius:10px;padding:10px 12px;font-size:13.5px}
+hr{border:0;border-top:1px solid var(--line);margin:2px 0;width:100%}
+@media (prefers-reduced-motion:no-preference){.hbar .fill{transition:width .3s}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>Tesla Ledger</h1>
+    <span class="pill"><i></i>Car not connected yet</span>
+  </header>
+  <div id="banner"></div>
+  <main id="view" class="wrap" style="padding:0"></main>
+</div>
+<nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
+<div id="tip" role="tooltip"></div>
+
+<script>
+"use strict";
+/* ---------- state ---------- */
+const KEY="teslaLedger.v1";
+const DEFAULTS={
+  useSample:true, sessions:[],
+  vehicles:[{id:"palisade",name:"2020 Palisade",mpg:15}], activeVehicle:"palisade",
+  gasPrice:4.50, lossPct:8, chargerKw:11, packKwh:75, fallbackWhMi:300,
+  scRate:40, otherRate:30,
+  plan:{mode:"fixed", fixed:18.1,
+    tod:{kind:"tod",other:18,periods:[{label:"Overnight",from:0,to:6,rate:12},{label:"Peak",from:13,to:19,rate:28}]},
+    supplyName:"MC Squared (supply)", deliveryName:"ComEd (delivery, time of day)",
+    supply:{kind:"flat",rate:9.5,other:9.5,periods:[]},
+    delivery:{kind:"tod",rate:6,other:5.5,periods:[{label:"Overnight",from:0,to:6,rate:3.5},{label:"Peak",from:13,to:19,rate:12}]}},
+  range:"30"
+};
+let S=load();
+function load(){try{const r=JSON.parse(localStorage.getItem(KEY));if(r&&r.vehicles)return Object.assign(structuredClone(DEFAULTS),r)}catch(e){}return structuredClone(DEFAULTS)}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+
+/* ---------- helpers ---------- */
+const TYPES={home:{label:"Home",c:"--s1"},supercharger:{label:"Supercharger",c:"--s2"},work:{label:"Work",c:"--s3"},other:{label:"Other",c:"--s4"}};
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const $0=x=>(x<0?"-":"")+"$"+Math.abs(Math.round(x)).toLocaleString();
+const $2=x=>"$"+x.toFixed(2);
+const n0=x=>Math.round(x).toLocaleString();
+const hr=h=>{h=((h%24)+24)%24;return (h%12||12)+(h<12?"am":"pm")};
+const fmtD=d=>new Date(d+"T12:00").toLocaleDateString(undefined,{month:"short",day:"numeric"});
+const iso=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+
+/* ---------- rate plan math ---------- */
+function compRate(c,h){
+  if(c.kind==="flat")return +c.rate||0;
+  for(const p of c.periods){const a=+p.from,b=+p.to;if(a===b)continue;if(a<b?(h>=a&&h<b):(h>=a||h<b))return +p.rate||0}
+  return +c.other||0;
+}
+function planRate(h,plan=S.plan){
+  if(plan.mode==="fixed")return +plan.fixed||0;
+  if(plan.mode==="tod")return compRate(plan.tod,h);
+  return compRate(plan.supply,h)+compRate(plan.delivery,h);
+}
+/* cost in dollars of charging kwh at home starting at startHour, spread over the hours it takes */
+function homeCost(kwh,startHour,plan=S.plan,kw=S.chargerKw){
+  let left=kwh,h=Math.floor(startHour),cost=0,guard=0;kw=Math.max(1,+kw||11);
+  while(left>1e-9&&guard++<200){const e=Math.min(left,kw);cost+=e*planRate(h%24,plan)/100;left-=e;h++}
+  return cost;
+}
+function sessionCost(s){
+  if(s.cost!=null&&s.cost!=="")return +s.cost;
+  if(s.type==="home")return homeCost(+s.kwh,s.hour==null?22:+s.hour);
+  return +s.kwh*(s.type==="supercharger"?S.scRate:S.otherRate)/100;
+}
+function fuelCost(miles,mpg,price){return miles/mpg*price}
+
+/* ---------- sample data (clearly marked in the UI) ---------- */
+function sample(){
+  let seed=20261116;const rnd=()=>(seed=(seed*1664525+1013904223)%4294967296)/4294967296;
+  const out=[];const d=new Date();d.setDate(d.getDate()-76);let odo=31240,prevEnd=80,i=0;
+  while(true){
+    d.setDate(d.getDate()+1+Math.floor(rnd()*3));if(d>new Date())break;
+    const start=Math.round(18+rnd()*30),r=rnd();
+    const type=r<.55?"home":r<.85?"supercharger":r<.93?"work":"other";
+    const end=type==="home"?(rnd()<.75?80:90):Math.round(68+rnd()*20);
+    const whmi=265+rnd()*90;
+    odo+=Math.round(Math.max(5,(prevEnd-start))/100*75*1000/whmi);
+    const kwh=+(((end-start)/100*75)/0.92).toFixed(1);
+    const s={id:"s"+(i++),date:iso(d),hour:type==="home"?(rnd()<.8?23:18):Math.round(9+rnd()*9),type,kwh,odo,startPct:start,endPct:end,cost:null};
+    if(type==="supercharger")s.cost=+(kwh*(0.36+rnd()*0.1)).toFixed(2);
+    out.push(s);prevEnd=end;
+  }
+  return out;
+}
+const SAMPLE=sample();
+const sessions=()=>[...(S.useSample?SAMPLE:S.sessions)].sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:(a.odo||0)-(b.odo||0));
+
+/* ---------- derived numbers ---------- */
+function milesBetween(prev,s){
+  if(prev&&prev.odo&&s.odo&&s.odo>prev.odo)return {mi:s.odo-prev.odo,est:false};
+  return {mi:+s.kwh*(1-S.lossPct/100)*1000/S.fallbackWhMi,est:true};
+}
+function inRange(all){
+  if(S.range==="all")return all;
+  const c=new Date();c.setDate(c.getDate()-(+S.range));const k=iso(c);return all.filter(s=>s.date>=k);
+}
+function summary(){
+  const all=sessions(),list=inRange(all);let miles=0,cost=0,kwh=0,est=false;const steps=[];
+  for(const s of list){
+    const i=all.indexOf(s),m=i>0?milesBetween(all[i-1],s):(S.range==="all"?{mi:0,est:false}:milesBetween(null,s));
+    if(m.est&&m.mi)est=true;miles+=m.mi;const c=sessionCost(s);cost+=c;kwh+=+s.kwh;steps.push({s,mi:m.mi,c});
+  }
+  return {list,miles,cost,kwh,est,steps};
+}
+const veh=()=>S.vehicles.find(v=>v.id===S.activeVehicle)||S.vehicles[0];
+
+/* ---------- charts ---------- */
+function lineChart(pts,fy,unit,zero=true){
+  if(pts.length<2)return '<p class="note">Add at least two sessions to draw this.</p>';
+  const W=360,H=190,L=40,R=50,T=14,B=26,ys=pts.map(p=>p.y);let lo=zero?Math.min(0,...ys):Math.min(...ys),hi=Math.max(...ys);if(hi===lo)hi=lo+1;
+  const step=nice((hi-lo)/3);lo=Math.floor(lo/step)*step;hi=Math.ceil(hi/step)*step;
+  const X=i=>L+(W-L-R)*i/(pts.length-1),Y=v=>T+(H-T-B)*(1-(v-lo)/(hi-lo));
+  let g="";for(let v=lo;v<=hi+1e-9;v+=step)g+=`<line x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)"/><text x="${L-6}" y="${Y(v)+4}" text-anchor="end">${fy(v)}</text>`;
+  const path=pts.map((p,i)=>(i?"L":"M")+X(i).toFixed(1)+" "+Y(p.y).toFixed(1)).join(" ");
+  const area=path+` L${X(pts.length-1)} ${Y(lo)} L${X(0)} ${Y(lo)} Z`;
+  const bw=(W-L-R)/(pts.length-1);const last=pts[pts.length-1];
+  const hits=pts.map((p,i)=>`<rect x="${X(i)-bw/2}" y="${T}" width="${bw}" height="${H-T-B}" fill="transparent" data-tip="${esc(p.tip)}"/>`).join("");
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(unit)}">${g}
+  <path d="${area}" fill="var(--accent)" opacity=".10"/><path d="${path}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>
+  <circle cx="${X(pts.length-1)}" cy="${Y(last.y)}" r="5" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/>
+  <text class="lbl" x="${X(pts.length-1)+9}" y="${Y(last.y)+4}">${fy(last.y)}</text>
+  <text x="${L}" y="${H-6}">${esc(pts[0].x)}</text><text x="${W-R}" y="${H-6}" text-anchor="end">${esc(last.x)}</text>${hits}</svg>`;
+}
+function nice(x){const p=Math.pow(10,Math.floor(Math.log10(x||1))),f=x/p;return (f<=1?1:f<=2?2:f<=5?5:10)*p}
+function rateChart(){
+  const r=[...Array(24)].map((_,h)=>planRate(h)),hi=Math.max(...r,1),lo=Math.min(...r);
+  const W=360,H=180,L=36,T=12,B=26,step=nice(hi/3),top=Math.ceil(hi/step)*step,bw=(W-L-8)/24;
+  const Y=v=>T+(H-T-B)*(1-v/top);let g="";
+  for(let v=0;v<=top+1e-9;v+=step)g+=`<line x1="${L}" x2="${W}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)"/><text x="${L-6}" y="${Y(v)+4}" text-anchor="end">${+v.toFixed(1)}¢</text>`;
+  const bars=r.map((v,h)=>`<rect x="${L+4+h*bw+1}" y="${Y(v)}" width="${bw-2}" height="${Math.max(1,Y(0)-Y(v))}" rx="3" fill="var(${v===lo&&hi!==lo?"--accent":"--accent-soft"})" data-tip="${hr(h)} to ${hr(h+1)}\n${v.toFixed(1)}¢ per kWh"/>`).join("");
+  const xl=[0,6,12,18].map(h=>`<text x="${L+4+h*bw}" y="${H-6}">${hr(h)}</text>`).join("");
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Home price per kWh by hour">${g}${bars}${xl}</svg>`;
+}
+function cheapestWindow(){
+  const r=[...Array(24)].map((_,h)=>planRate(h)),lo=Math.min(...r),hi=Math.max(...r);if(lo===hi)return null;
+  let best=null;for(let s=0;s<24;s++){if(r[s]!==lo||r[(s+23)%24]===lo)continue;let n=0;while(n<24&&r[(s+n)%24]===lo)n++;if(!best||n>best.n)best={s,n}}
+  return best?{from:best.s,to:(best.s+best.n)%24,lo,hi}:null;
+}
+
+/* ---------- views ---------- */
+const rangeBtns=()=>`<div class="chips" role="group" aria-label="Time range">${[["30","30 days"],["90","90 days"],["all","All time"]].map(([k,l])=>`<button data-act="range" data-v="${k}" aria-pressed="${S.range===k}">${l}</button>`).join("")}</div>`;
+
+function vSavings(){
+  const m=summary(),v=veh(),gas=fuelCost(m.miles,v.mpg,S.gasPrice),saved=gas-m.cost;
+  const rows=[{n:"Model Y charging",c:m.cost,tesla:true},...S.vehicles.map(x=>({n:x.name+" · "+x.mpg+" mpg",c:fuelCost(m.miles,x.mpg,S.gasPrice),sel:x.id===v.id}))];
+  const max=Math.max(...rows.map(r=>r.c),1);
+  let cg=0,cc=0;const pts=m.steps.map(st=>{cg+=fuelCost(st.mi,v.mpg,S.gasPrice);cc+=st.c;return {x:fmtD(st.s.date),y:cg-cc,tip:`${fmtD(st.s.date)}\nSaved so far: ${$0(cg-cc)}`}});
+  return `
+  <section class="card">
+    <div class="row" style="justify-content:space-between">${rangeBtns()}</div>
+    <div class="hero"><span class="label">${saved>=0?"Saved":"Cost more"} compared with the ${esc(v.name)}</span>
+      <span class="fig ${saved>=0?"good":"bad"}">${$0(Math.abs(saved))}</span></div>
+    <div class="tiles">
+      <div class="tile"><b>${n0(m.miles)}</b><span>miles driven${m.est?" (part estimated)":""}</span></div>
+      <div class="tile"><b>${$0(m.cost)}</b><span>spent on charging</span></div>
+      <div class="tile"><b>${$0(gas)}</b><span>gas at ${v.mpg} mpg, ${$2(S.gasPrice)}/gal</span></div>
+      <div class="tile"><b>${m.miles?(m.cost/m.miles*100).toFixed(1):"0"}¢ <small style="font-size:13px;color:var(--muted)">vs ${(S.gasPrice/v.mpg*100).toFixed(1)}¢</small></b><span>cost per mile</span></div>
+    </div>
+    <p class="note">Miles come from odometer readings between charges. A charge without one is estimated from its kWh.</p>
+  </section>
+  <section class="card"><h2>What these ${n0(m.miles)} miles cost in each vehicle</h2>
+    ${rows.map(r=>`<div class="hbar"><span>${esc(r.n)}</span><div class="track"><div class="fill" style="width:${(r.c/max*100).toFixed(1)}%;background:var(${r.tesla?"--accent":r.sel?"--neutral-bar-strong":"--neutral-bar"})" data-tip="${esc(r.n)}\n${$2(r.c)}"></div></div><span class="val">${$0(r.c)}</span></div>`).join("")}
+    <div class="row"><span class="sub">Compare against:</span><div class="chips">${S.vehicles.map(x=>`<button data-act="veh" data-v="${esc(x.id)}" aria-pressed="${x.id===v.id}">${esc(x.name)}</button>`).join("")}</div><a class="sub" href="#setup">Add a vehicle</a></div>
+  </section>
+  <section class="card"><h2>Savings adding up, compared with the ${esc(v.name)}</h2>${lineChart(pts,$0,"Running savings in dollars")}</section>`;
+}
+
+function vCharging(){
+  const m=summary(),by={};for(const k in TYPES)by[k]={n:0,kwh:0,c:0};
+  m.list.forEach(s=>{const b=by[s.type]||by.other;b.n++;b.kwh+=+s.kwh;b.c+=sessionCost(s)});
+  const used=Object.keys(TYPES).filter(k=>by[k].n);
+  const today=iso(new Date());
+  return `
+  <section class="card">
+    <div class="row" style="justify-content:space-between">${rangeBtns()}</div>
+    <div class="tiles">
+      <div class="tile"><b>${n0(m.kwh)} kWh</b><span>charged</span></div>
+      <div class="tile"><b>${$0(m.cost)}</b><span>spent</span></div>
+      <div class="tile"><b>${m.kwh?(m.cost/m.kwh*100).toFixed(1):"0"}¢</b><span>average per kWh</span></div>
+      <div class="tile"><b>${m.list.length}</b><span>sessions</span></div>
+    </div>
+    <h2>Where the energy came from</h2>
+    <div class="stack">${used.map(k=>`<div style="flex:${by[k].kwh};background:var(${TYPES[k].c})" data-tip="${TYPES[k].label}\n${n0(by[k].kwh)} kWh, ${m.kwh?Math.round(by[k].kwh/m.kwh*100):0}%"></div>`).join("")}</div>
+    <div class="scroll"><table><thead><tr><th>Place</th><th>Share</th><th>kWh</th><th>Cost</th><th>¢/kWh</th></tr></thead><tbody>
+    ${used.map(k=>`<tr><td><i class="dot" style="background:var(${TYPES[k].c})"></i>${TYPES[k].label}</td><td>${m.kwh?Math.round(by[k].kwh/m.kwh*100):0}%</td><td>${n0(by[k].kwh)}</td><td>${$0(by[k].c)}</td><td>${by[k].kwh?(by[k].c/by[k].kwh*100).toFixed(1):"0"}</td></tr>`).join("")||'<tr><td colspan="5">No sessions in this range.</td></tr>'}
+    </tbody></table></div>
+  </section>
+  <section class="card"><h2>Add a charging session</h2>
+    ${S.useSample?'<p class="sub">You are looking at sample data. Adding a session switches to your own log.</p>':""}
+    <form id="addForm" class="grid2 grid3">
+      <label class="f">Date<input id="f-date" type="date" value="${today}" required></label>
+      <label class="f">Start hour<select id="f-hour">${[...Array(24)].map((_,h)=>`<option value="${h}"${h===23?" selected":""}>${hr(h)}</option>`).join("")}</select></label>
+      <label class="f">Place<select id="f-type">${Object.keys(TYPES).map(k=>`<option value="${k}">${TYPES[k].label}</option>`).join("")}</select></label>
+      <label class="f">kWh added<input id="f-kwh" type="number" step="0.1" min="0" inputmode="decimal" required></label>
+      <label class="f">Cost in $ (blank = use rates)<input id="f-cost" type="number" step="0.01" min="0" inputmode="decimal"></label>
+      <label class="f">Odometer<input id="f-odo" type="number" step="1" min="0" inputmode="numeric"></label>
+      <label class="f">Battery % at start<input id="f-start" type="number" min="0" max="100" inputmode="numeric"></label>
+      <label class="f">Battery % at end<input id="f-end" type="number" min="0" max="100" inputmode="numeric"></label>
+      <div style="display:flex;align-items:end"><button class="primary" type="submit">Save session</button></div>
+    </form>
+  </section>
+  <section class="card"><h2>Sessions</h2><div>
+    ${[...m.list].reverse().map(s=>`<div class="sess"><div class="a"><b><i class="dot" style="background:var(${(TYPES[s.type]||TYPES.other).c})"></i>${(TYPES[s.type]||TYPES.other).label} · ${fmtD(s.date)}</b>
+      <span>${(+s.kwh).toFixed(1)} kWh${s.startPct!=null&&s.endPct!=null?` · ${s.startPct}% to ${s.endPct}%`:""}${s.odo?` · ${n0(s.odo)} mi`:""}</span></div>
+      <div class="b"><b>${$2(sessionCost(s))}</b>${S.useSample?"":`<br><button class="quiet" data-act="del" data-v="${esc(s.id)}" aria-label="Delete session from ${fmtD(s.date)}">Delete</button>`}</div></div>`).join("")||'<p class="sub">Nothing logged in this range yet.</p>'}
+  </div></section>`;
+}
+
+function compEditor(key,c,title){
+  return `<div class="card" style="padding:12px"><div class="row" style="justify-content:space-between"><b>${esc(title)}</b>
+    <div class="chips"><button data-act="ckind" data-k="${key}" data-v="flat" aria-pressed="${c.kind==="flat"}">Flat</button><button data-act="ckind" data-k="${key}" data-v="tod" aria-pressed="${c.kind==="tod"}">Time of day</button></div></div>
+    ${c.kind==="flat"?`<label class="f">Rate, ¢ per kWh<input type="number" step="0.01" data-set="${key}.rate" value="${c.rate}"></label>`:
+    `${c.periods.map((p,i)=>`<div class="plan-row"><label class="f">Period<input data-set="${key}.periods.${i}.label" value="${esc(p.label)}"></label>
+      <label class="f">From<select data-set="${key}.periods.${i}.from">${hourOpts(p.from)}</select></label><label class="f">To<select data-set="${key}.periods.${i}.to">${hourOpts(p.to)}</select></label>
+      <label class="f">¢/kWh<input type="number" step="0.01" data-set="${key}.periods.${i}.rate" value="${p.rate}"></label><button class="quiet" data-act="pdel" data-k="${key}" data-v="${i}" aria-label="Remove period">Remove</button></div>`).join("")}
+    <div class="row"><label class="f" style="max-width:170px">All other hours, ¢/kWh<input type="number" step="0.01" data-set="${key}.other" value="${c.other}"></label><button data-act="padd" data-k="${key}">Add a period</button></div>`}
+  </div>`;
+}
+const hourOpts=v=>[...Array(24)].map((_,h)=>`<option value="${h}"${+v===h?" selected":""}>${hr(h)}</option>`).join("");
+
+function vRates(){
+  const p=S.plan,w=cheapestWindow(),r=[...Array(24)].map((_,h)=>planRate(h)),avg=r.reduce((a,b)=>a+b,0)/24;
+  const best=w?homeCost(50,w.from):homeCost(50,23),worst=Math.max(...[...Array(24)].map((_,h)=>homeCost(50,h)));
+  return `
+  <section class="card"><h2>Home electricity plan</h2>
+    <div class="chips" role="group" aria-label="Plan type">${[["fixed","Fixed rate"],["tod","Time of day"],["hybrid","Supplier + ComEd"]].map(([k,l])=>`<button data-act="mode" data-v="${k}" aria-pressed="${p.mode===k}">${l}</button>`).join("")}</div>
+    ${p.mode==="fixed"?`<label class="f" style="max-width:220px">All-in rate, ¢ per kWh<input type="number" step="0.01" data-set="fixed" value="${p.fixed}"></label><p class="note">All-in price per kWh, supply and delivery together.</p>`:""}
+    ${p.mode==="tod"?compEditor("tod",p.tod,"All-in price by time of day")+'<p class="note">The starting numbers are placeholders. Replace them with your plan.</p>':""}
+    ${p.mode==="hybrid"?compEditor("supply",p.supply,p.supplyName)+compEditor("delivery",p.delivery,p.deliveryName)+'<p class="note">The price each hour is supply plus delivery. The starting numbers are placeholders, so enter the ones from your MC Squared agreement and ComEd bill.</p>':""}
+  </section>
+  <section class="card"><h2>Price to charge at home, by hour</h2>
+    ${rateChart()}
+    ${w?'<div class="legend"><span><i class="dot" style="background:var(--accent)"></i>Cheapest hours</span><span><i class="dot" style="background:var(--accent-soft)"></i>Other hours</span></div>':""}
+    <div class="callout">${w?`<b>Cheapest window: ${hr(w.from)} to ${hr(w.to)}</b> at ${w.lo.toFixed(1)}¢. Adding 50 kWh starting then costs about <b>${$2(best)}</b>, compared with up to ${$2(worst)} at the worst time.`:`<b>Same price all day: ${avg.toFixed(1)}¢ per kWh.</b> Adding 50 kWh costs about ${$2(best)} whenever you plug in.`}</div>
+    <p class="note">Live ComEd hourly prices can be added here once the car and the Worker are connected.</p>
+  </section>
+  <section class="card"><h2>Away from home</h2>
+    <div class="grid2"><label class="f">Supercharger, ¢/kWh when no cost is entered<input type="number" step="0.1" data-top="scRate" value="${S.scRate}"></label>
+    <label class="f">Work and other, ¢/kWh when no cost is entered<input type="number" step="0.1" data-top="otherRate" value="${S.otherRate}"></label></div>
+  </section>`;
+}
+
+function vBattery(){
+  const all=sessions(),pts=[];let tu=0,tm=0;
+  for(let i=1;i<all.length;i++){const a=all[i-1],b=all[i];if(a.endPct==null||b.startPct==null||!a.odo||!b.odo)continue;
+    const used=(a.endPct-b.startPct)/100*S.packKwh,mi=b.odo-a.odo;if(used<=0||mi<=0)continue;tu+=used;tm+=mi;
+    pts.push({x:fmtD(b.date),y:used*1000/mi,tip:`${fmtD(b.date)}\n${Math.round(used*1000/mi)} Wh/mi over ${n0(mi)} miles`})}
+  const ends=all.filter(s=>s.endPct!=null).map(s=>+s.endPct),starts=all.filter(s=>s.startPct!=null).map(s=>+s.startPct);
+  const avg=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:0;
+  const buckets=[["Up to 80%",ends.filter(e=>e<=80).length],["81 to 90%",ends.filter(e=>e>80&&e<=90).length],["91 to 100%",ends.filter(e=>e>90).length]];
+  const bm=Math.max(...buckets.map(b=>b[1]),1),wh=tm?tu*1000/tm:0;
+  return `
+  <section class="card"><h2>Efficiency</h2>
+    <div class="tiles">
+      <div class="tile"><b>${wh?Math.round(wh):"–"}</b><span>Wh per mile, average</span></div>
+      <div class="tile"><b>${wh?(1000/wh).toFixed(2):"–"}</b><span>miles per kWh</span></div>
+      <div class="tile"><b>${ends.length?Math.round(avg(ends))+"%":"–"}</b><span>typical charge-to level</span></div>
+      <div class="tile"><b>${starts.length?Math.round(avg(starts))+"%":"–"}</b><span>typical level when plugging in</span></div>
+    </div>
+    ${lineChart(pts,v=>Math.round(v),"Wh per mile between charges",false)}
+    <p class="note">Wh per mile between charges, from battery % used and odometer miles, using a ${S.packKwh} kWh pack. Lower is better.</p>
+  </section>
+  <section class="card"><h2>How full you charge</h2>
+    ${buckets.map(b=>`<div class="hbar"><span>${b[0]}</span><div class="track"><div class="fill" style="width:${(b[1]/bm*100).toFixed(1)}%;background:var(--accent)" data-tip="${b[0]}\n${b[1]} sessions"></div></div><span class="val">${b[1]}</span></div>`).join("")}
+    <p class="note">80% is the everyday target. Up to 90% is fine for heavy days, as long as the car does not sit full.</p>
+  </section>`;
+}
+
+function vSetup(){
+  return `
+  <section class="card"><h2>Comparison vehicles</h2>
+    ${S.vehicles.map((v,i)=>`<div class="row"><label class="f" style="flex:2 1 150px">Name<input data-veh="${i}.name" value="${esc(v.name)}"></label><label class="f" style="flex:1 1 80px">MPG<input type="number" step="0.1" min="1" data-veh="${i}.mpg" value="${v.mpg}"></label>${S.vehicles.length>1?`<button class="quiet" data-act="vdel" data-v="${i}" aria-label="Remove ${esc(v.name)}">Remove</button>`:""}</div>`).join("")}
+    <div class="row"><button data-act="vadd">Add a vehicle</button></div>
+    <label class="f" style="max-width:220px">Gas price, $ per gallon<input type="number" step="0.01" data-top="gasPrice" value="${S.gasPrice}"></label>
+  </section>
+  <section class="card"><h2>Car and charger</h2>
+    <div class="grid2">
+      <label class="f">Usable battery, kWh<input type="number" step="0.5" data-top="packKwh" value="${S.packKwh}"></label>
+      <label class="f">Home charger, kW<input type="number" step="0.1" data-top="chargerKw" value="${S.chargerKw}"></label>
+      <label class="f">Charging loss, %<input type="number" step="1" data-top="lossPct" value="${S.lossPct}"></label>
+      <label class="f">Wh per mile, when no odometer is logged<input type="number" step="5" data-top="fallbackWhMi" value="${S.fallbackWhMi}"></label>
+    </div>
+  </section>
+  <section class="card"><h2>Data</h2>
+    <div class="row"><button data-act="sample" aria-pressed="${S.useSample}">${S.useSample?"Showing sample data":"Show sample data"}</button><span class="sub">${S.sessions.length} of your own sessions saved on this device</span></div>
+    <hr>
+    <p class="sub">Until family sync is set up, move data between phones by copying it here and loading it there.</p>
+    <div class="row"><button data-act="export">Copy my data</button><button data-act="import">Load pasted data</button><span id="xmsg" class="sub" role="status"></span></div>
+    <label class="f">Paste data here to load it<textarea id="xbox" rows="3" spellcheck="false"></textarea></label>
+  </section>
+  <section class="card"><h2>Connecting the car</h2>
+    <p class="sub">Not connected. Sessions are typed in by hand for now. Once the Tesla developer app, the public key and the Cloudflare Worker are set up, charges and odometer readings will fill in automatically and the family can share one log.</p>
+  </section>`;
+}
+
+/* ---------- shell ---------- */
+const TABS=[["savings","Savings","M4 18l5-6 4 3 7-9"],["charging","Charging","M13 3L5 13h6l-1 8 8-11h-6z"],["rates","Rates","M4 20V10M10 20V4M16 20v-7M22 20H2"],["battery","Battery","M3 8h16v8H3zM21 11v2"],["setup","Setup","M4 7h16M4 12h16M4 17h16"]];
+const VIEWS={savings:vSavings,charging:vCharging,rates:vRates,battery:vBattery,setup:vSetup};
+const cur=()=>{const h=location.hash.slice(1);return VIEWS[h]?h:"savings"};
+function render(){
+  const c=cur();
+  document.getElementById("tabs").innerHTML=TABS.map(([k,l,d])=>`<a href="#${k}" ${k===c?'aria-current="page"':""}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>${l}</a>`).join("");
+  document.getElementById("banner").innerHTML=S.useSample?`<div class="banner"><span><b>Sample data.</b> These numbers are made up to show how the app works.</span><button data-act="sample">Use my own data</button></div>`:"";
+  document.getElementById("view").innerHTML=VIEWS[c]();
+}
+function setPath(obj,path,val){const k=path.split(".");let o=obj;for(let i=0;i<k.length-1;i++)o=o[k[i]];const last=k[k.length-1];o[last]=(last==="label"||last==="name")?val:(val===""?0:+val)}
+
+document.addEventListener("click",e=>{
+  const b=e.target.closest("[data-act]");if(!b)return;const a=b.dataset.act,v=b.dataset.v,k=b.dataset.k;
+  if(a==="range")S.range=v;
+  else if(a==="veh")S.activeVehicle=v;
+  else if(a==="sample")S.useSample=!S.useSample;
+  else if(a==="mode")S.plan.mode=v;
+  else if(a==="ckind")S.plan[k].kind=v;
+  else if(a==="padd")S.plan[k].periods.push({label:"New period",from:9,to:13,rate:S.plan[k].other});
+  else if(a==="pdel")S.plan[k].periods.splice(+v,1);
+  else if(a==="vadd"){const id="v"+Date.now();S.vehicles.push({id,name:"New vehicle",mpg:25})}
+  else if(a==="vdel"){const [g]=S.vehicles.splice(+v,1);if(g.id===S.activeVehicle)S.activeVehicle=S.vehicles[0].id}
+  else if(a==="del")S.sessions=S.sessions.filter(s=>s.id!==v);
+  else if(a==="export"){const t=JSON.stringify(S);const box=document.getElementById("xbox"),msg=document.getElementById("xmsg");box.value=t;
+    (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>msg.textContent="Copied.",()=>{box.select();msg.textContent="Copy the text in the box below."});return}
+  else if(a==="import"){const msg=document.getElementById("xmsg");try{const r=JSON.parse(document.getElementById("xbox").value);if(!r||!Array.isArray(r.vehicles)||!Array.isArray(r.sessions))throw 0;S=Object.assign(structuredClone(DEFAULTS),r);save();render();document.getElementById("xmsg").textContent="Loaded."}catch(_){msg.textContent="That text is not Tesla Ledger data. Copy it again from the other phone and paste the whole thing."}return}
+  save();render();
+});
+document.addEventListener("change",e=>{
+  const t=e.target;
+  if(t.dataset.set){setPath(S.plan,t.dataset.set,t.value)}
+  else if(t.dataset.top){S[t.dataset.top]=+t.value||0}
+  else if(t.dataset.veh){setPath(S.vehicles,t.dataset.veh,t.value);if(t.dataset.veh.endsWith("mpg")){const i=+t.dataset.veh.split(".")[0];S.vehicles[i].mpg=Math.max(1,S.vehicles[i].mpg)}}
+  else return;
+  save();render();
+});
+document.addEventListener("submit",e=>{
+  if(e.target.id!=="addForm")return;e.preventDefault();const g=id=>document.getElementById(id).value;
+  const num=x=>x===""?null:+x;
+  S.sessions.push({id:"u"+Date.now(),date:g("f-date"),hour:+g("f-hour"),type:g("f-type"),kwh:+g("f-kwh"),cost:num(g("f-cost")),odo:num(g("f-odo")),startPct:num(g("f-start")),endPct:num(g("f-end"))});
+  S.useSample=false;S.range="all";save();render();
+});
+/* tooltips: hover on desktop, tap on touch */
+const tip=document.getElementById("tip");
+function showTip(el,x,y){tip.textContent=el.dataset.tip;tip.style.display="block";const w=tip.offsetWidth,h=tip.offsetHeight;
+  tip.style.left=Math.max(8,Math.min(innerWidth-w-8,x-w/2))+"px";tip.style.top=Math.max(8,y-h-12)+"px"}
+document.addEventListener("pointermove",e=>{const el=e.target.closest&&e.target.closest("[data-tip]");if(el)showTip(el,e.clientX,e.clientY);else tip.style.display="none"});
+document.addEventListener("pointerdown",e=>{const el=e.target.closest&&e.target.closest("[data-tip]");if(el)showTip(el,e.clientX,e.clientY);else tip.style.display="none"});
+addEventListener("scroll",()=>tip.style.display="none",{passive:true});
+addEventListener("hashchange",()=>{render();scrollTo(0,0)});
+render();
+if("serviceWorker" in navigator&&location.protocol==="https:"){addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}))}
+</script>
+</body>
+</html>

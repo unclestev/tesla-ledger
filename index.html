@@ -101,7 +101,7 @@ svg .lbl{fill:var(--ink);font-weight:600;font-size:12px}
 .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;color:var(--ink-2)}
 #tip{position:fixed;z-index:20;pointer-events:none;background:var(--ink);color:var(--surface);font-size:12.5px;padding:6px 9px;border-radius:8px;max-width:240px;display:none;white-space:pre-line}
 nav.tabs{position:fixed;left:0;right:0;bottom:0;padding-bottom:env(safe-area-inset-bottom);background:var(--surface);border-top:1px solid var(--line);z-index:10}
-nav.tabs .in{max-width:720px;margin:0 auto;display:grid;grid-template-columns:repeat(5,1fr)}
+nav.tabs .in{max-width:720px;margin:0 auto;display:grid;grid-template-columns:repeat(6,1fr)}
 nav.tabs a{display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 2px 12px;color:var(--muted);text-decoration:none;font-size:11.5px;font-weight:500}
 nav.tabs a svg{width:22px;height:22px}
 nav.tabs a[aria-current="page"]{color:var(--accent)}
@@ -109,6 +109,10 @@ nav.tabs a[aria-current="page"]{color:var(--accent)}
 .meter{height:12px;background:var(--line);border-radius:6px;overflow:hidden}
 .meter div{height:100%;background:var(--accent);border-radius:6px;min-width:3px}
 .big{font-family:var(--display);font-weight:700;font-size:24px;letter-spacing:-.01em}
+.mrow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) auto;gap:6px 8px;align-items:end;padding:10px 0;border-bottom:1px dashed var(--axis)}
+.mrow .nm{grid-column:1/-1;display:flex;gap:8px;align-items:end}
+.mrow .nm label{flex:1}
+.mrow .yr{font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap;padding-bottom:9px}
 .callout{background:var(--accent-wash);border-radius:10px;padding:10px 12px;font-size:13.5px}
 hr{border:0;border-top:1px solid var(--line);margin:2px 0;width:100%}
 @media (prefers-reduced-motion:no-preference){.hbar .fill{transition:width .3s}}
@@ -140,11 +144,29 @@ const DEFAULTS={
     supplyName:"MC Squared (supply)", deliveryName:"ComEd (delivery, time of day)",
     supply:{kind:"flat",rate:9.5,other:9.5,periods:[]},
     delivery:{kind:"tod",rate:6,other:5.5,periods:[{label:"Overnight",from:0,to:6,rate:3.5},{label:"Peak",from:13,to:19,rate:12}]}},
-  range:"30", theme:"system", payoffGoal:13000
+  range:"30", theme:"system", payoffGoal:13000,
+  maint:{annual:15000,years:5,preset:"severe",gasName:"2020 Palisade",tesla:null,gas:null}
 };
+/* Scheduled maintenance. Intervals follow the makers' schedules; costs are rough shop estimates to edit. */
+const M_TESLA=()=>[
+  {name:"Tire rotation",miles:6250,months:0,cost:60},
+  {name:"Cabin air filter",miles:0,months:24,cost:70},
+  {name:"Brake caliper clean and lube (salted roads)",miles:0,months:12,cost:150},
+  {name:"Brake fluid check, flush if needed",miles:0,months:48,cost:120},
+  {name:"A/C desiccant bag",miles:0,months:48,cost:300}];
+const M_GAS=p=>[
+  {name:"Oil and filter change",miles:p==="severe"?3750:7500,months:p==="severe"?6:12,cost:95},
+  {name:"Tire rotation",miles:7500,months:0,cost:30},
+  {name:"Cabin air filter",miles:15000,months:0,cost:65},
+  {name:"Engine air filter",miles:p==="severe"?15000:30000,months:0,cost:55},
+  {name:"Brake fluid",miles:45000,months:0,cost:150},
+  {name:"Coolant (after the first 120,000 miles)",miles:30000,months:24,cost:190},
+  {name:"Spark plugs",miles:97500,months:0,cost:450}
+  ].concat(p==="severe"?[{name:"Transmission fluid",miles:60000,months:0,cost:350}]:[]);
 let editId=null;
 let S=load();
-function load(){try{const r=JSON.parse(localStorage.getItem(KEY));if(r&&r.vehicles)return Object.assign(structuredClone(DEFAULTS),r)}catch(e){}return structuredClone(DEFAULTS)}
+function fill(o){o.maint=Object.assign(structuredClone(DEFAULTS.maint),o.maint||{});if(!Array.isArray(o.maint.tesla))o.maint.tesla=M_TESLA();if(!Array.isArray(o.maint.gas))o.maint.gas=M_GAS(o.maint.preset);return o}
+function load(){try{const r=JSON.parse(localStorage.getItem(KEY));if(r&&r.vehicles)return fill(Object.assign(structuredClone(DEFAULTS),r))}catch(e){}return fill(structuredClone(DEFAULTS))}
 function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
 
 /* ---------- theme: follows the device unless Light or Dark is chosen in Setup ---------- */
@@ -452,6 +474,40 @@ function vBattery(){
   </section>`;
 }
 
+const mEff=(it,an)=>Math.min(+it.miles>0?+it.miles:Infinity,+it.months>0?it.months/12*an:Infinity);
+const mYear=(it,an)=>{const e=mEff(it,an);return isFinite(e)&&e>0?(+it.cost||0)*an/e:0};
+function mList(key,title,extra){
+  const M=S.maint,an=Math.max(1,+M.annual||0);
+  return `<section class="card"><h2>${esc(title)}</h2>${extra||""}
+    <div>${M[key].map((it,i)=>`<div class="mrow"><div class="nm"><label class="f">Service<input data-m="${key}.${i}.name" value="${esc(it.name)}"></label><button class="quiet" data-act="mdel" data-k="${key}" data-v="${i}" aria-label="Remove ${esc(it.name)}">Remove</button></div>
+      <label class="f">Every, miles<input type="number" min="0" step="250" inputmode="numeric" data-m="${key}.${i}.miles" value="${it.miles||""}"></label>
+      <label class="f">Every, months<input type="number" min="0" step="1" inputmode="numeric" data-m="${key}.${i}.months" value="${it.months||""}"></label>
+      <label class="f">Cost, $<input type="number" min="0" step="5" inputmode="decimal" data-m="${key}.${i}.cost" value="${it.cost}"></label>
+      <span class="yr" data-tip="${esc(it.name)}\nAbout ${(an/mEff(it,an)||0).toFixed(1)} times a year">${$0(mYear(it,an))}/yr</span></div>`).join("")}</div>
+    <div class="row" style="justify-content:space-between"><button data-act="madd" data-k="${key}">Add a service</button><span class="sub">Total: <b>${$0(M[key].reduce((a,it)=>a+mYear(it,an),0))} a year</b></span></div>
+  </section>`;
+}
+function vService(){
+  const M=S.maint,an=Math.max(1,+M.annual||0),yrs=+M.years||5,t=M.tesla.reduce((a,it)=>a+mYear(it,an),0),g=M.gas.reduce((a,it)=>a+mYear(it,an),0),d=(g-t)*yrs,mx=Math.max(t,g,1)*yrs;
+  return `
+  <section class="card">
+    <div class="row" style="justify-content:space-between;align-items:end"><div class="chips" role="group" aria-label="Years to compare">${[1,3,5].map(y=>`<button data-act="myears" data-v="${y}" aria-pressed="${yrs===y}">${y} year${y>1?"s":""}</button>`).join("")}</div>
+      <label class="f" style="max-width:150px">Miles driven per year<input type="number" min="1000" step="500" inputmode="numeric" data-maint="annual" value="${M.annual}"></label></div>
+    <div class="hero"><span class="label">Estimated scheduled maintenance ${d>=0?"saved":"extra"} over ${yrs} year${yrs>1?"s":""}, compared with the ${esc(M.gasName)}</span>
+      <span class="fig ${d>=0?"good":"bad"}">${$0(Math.abs(d))}</span></div>
+    <div class="hbar"><span>Model Y</span><div class="track"><div class="fill" style="width:${(t*yrs/mx*100).toFixed(1)}%;background:var(--accent)" data-tip="Model Y\n${$0(t)} a year"></div></div><span class="val">${$0(t*yrs)}</span></div>
+    <div class="hbar"><span>${esc(M.gasName)}</span><div class="track"><div class="fill" style="width:${(g*yrs/mx*100).toFixed(1)}%;background:var(--neutral-bar-strong)" data-tip="${esc(M.gasName)}\n${$0(g)} a year"></div></div><span class="val">${$0(g*yrs)}</span></div>
+    <div class="tiles">
+      <div class="tile"><b>${$0(t)}</b><span>Model Y, per year</span></div>
+      <div class="tile"><b>${$0(g)}</b><span>${esc(M.gasName)}, per year</span></div>
+      <div class="tile"><b>${(t/an*100).toFixed(1)}¢</b><span>Model Y, per mile</span></div>
+      <div class="tile"><b>${(g/an*100).toFixed(1)}¢</b><span>${esc(M.gasName)}, per mile</span></div>
+    </div>
+    <p class="note">Estimates only. This covers scheduled maintenance from each maker's schedule. It leaves out tires, brake pads, wipers and repairs. Costs are rough shop prices, so change them to match what you actually pay.</p>
+  </section>
+  ${mList("tesla","Model Y schedule")}
+  ${mList("gas",M.gasName+" schedule",`<div class="row"><span class="sub">Start from Hyundai's:</span><div class="chips"><button data-act="mpreset" data-v="normal" aria-pressed="${M.preset==="normal"}">Normal schedule</button><button data-act="mpreset" data-v="severe" aria-pressed="${M.preset==="severe"}">Severe schedule</button></div></div><p class="note">Severe applies to mostly short trips and stop-and-go driving, which fits delivery work. Picking one replaces the list below.</p>`)}`;
+}
 function vSetup(){
   return `
   <section class="card"><h2>Appearance</h2>
@@ -484,8 +540,8 @@ function vSetup(){
 }
 
 /* ---------- shell ---------- */
-const TABS=[["savings","Savings","M4 18l5-6 4 3 7-9"],["charging","Charging","M13 3L5 13h6l-1 8 8-11h-6z"],["rates","Rates","M4 20V10M10 20V4M16 20v-7M22 20H2"],["battery","Battery","M3 8h16v8H3zM21 11v2"],["setup","Setup","M4 7h16M4 12h16M4 17h16"]];
-const VIEWS={savings:vSavings,charging:vCharging,rates:vRates,battery:vBattery,setup:vSetup};
+const TABS=[["savings","Savings","M4 18l5-6 4 3 7-9"],["charging","Charging","M13 3L5 13h6l-1 8 8-11h-6z"],["rates","Rates","M4 20V10M10 20V4M16 20v-7M22 20H2"],["battery","Battery","M3 8h16v8H3zM21 11v2"],["service","Service","M14.5 5.5a4 4 0 0 0 4 4l1.5-1.5a5.5 5.5 0 0 1-7.2 5.3L7 19a2 2 0 0 1-3-3l5.7-5.8A5.5 5.5 0 0 1 15 3z"],["setup","Setup","M4 7h16M4 12h16M4 17h16"]];
+const VIEWS={savings:vSavings,charging:vCharging,rates:vRates,battery:vBattery,service:vService,setup:vSetup};
 const cur=()=>{const h=location.hash.slice(1);return VIEWS[h]?h:"savings"};
 function render(){
   const c=cur();
@@ -510,15 +566,21 @@ document.addEventListener("click",e=>{
   else if(a==="del"){S.sessions=S.sessions.filter(s=>s.id!==v);if(editId===v)editId=null}
   else if(a==="edit"){editId=v;render();const f=document.getElementById("formCard");if(f)f.scrollIntoView({block:"start"});return}
   else if(a==="cancelEdit")editId=null;
+  else if(a==="myears")S.maint.years=+v;
+  else if(a==="madd")S.maint[k].push({name:"New service",miles:10000,months:0,cost:100});
+  else if(a==="mdel")S.maint[k].splice(+v,1);
+  else if(a==="mpreset"){S.maint.preset=v;S.maint.gas=M_GAS(v)}
   else if(a==="export"){const t=JSON.stringify(S);const box=document.getElementById("xbox"),msg=document.getElementById("xmsg");box.value=t;
     (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>msg.textContent="Copied.",()=>{box.select();msg.textContent="Copy the text in the box below."});return}
-  else if(a==="import"){const msg=document.getElementById("xmsg");try{const r=JSON.parse(document.getElementById("xbox").value);if(!r||!Array.isArray(r.vehicles)||!Array.isArray(r.sessions))throw 0;S=Object.assign(structuredClone(DEFAULTS),r);save();applyTheme();render();document.getElementById("xmsg").textContent="Loaded."}catch(_){msg.textContent="That text is not Tesla Ledger data. Copy it again from the other phone and paste the whole thing."}return}
+  else if(a==="import"){const msg=document.getElementById("xmsg");try{const r=JSON.parse(document.getElementById("xbox").value);if(!r||!Array.isArray(r.vehicles)||!Array.isArray(r.sessions))throw 0;S=fill(Object.assign(structuredClone(DEFAULTS),r));save();applyTheme();render();document.getElementById("xmsg").textContent="Loaded."}catch(_){msg.textContent="That text is not Tesla Ledger data. Copy it again from the other phone and paste the whole thing."}return}
   save();render();
 });
 document.addEventListener("change",e=>{
   const t=e.target;
   if(t.dataset.set){setPath(S.plan,t.dataset.set,t.value)}
   else if(t.dataset.top){S[t.dataset.top]=+t.value||0}
+  else if(t.dataset.m){setPath(S.maint,t.dataset.m,t.value)}
+  else if(t.dataset.maint){S.maint[t.dataset.maint]=Math.max(1,+t.value||0)}
   else if(t.dataset.veh){setPath(S.vehicles,t.dataset.veh,t.value);if(t.dataset.veh.endsWith("mpg")){const i=+t.dataset.veh.split(".")[0];S.vehicles[i].mpg=Math.max(1,S.vehicles[i].mpg)}}
   else return;
   save();render();

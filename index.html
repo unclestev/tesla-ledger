@@ -101,7 +101,7 @@ svg .lbl{fill:var(--ink);font-weight:600;font-size:12px}
 .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;color:var(--ink-2)}
 #tip{position:fixed;z-index:20;pointer-events:none;background:var(--ink);color:var(--surface);font-size:12.5px;padding:6px 9px;border-radius:8px;max-width:240px;display:none;white-space:pre-line}
 nav.tabs{position:fixed;left:0;right:0;bottom:0;padding-bottom:env(safe-area-inset-bottom);background:var(--surface);border-top:1px solid var(--line);z-index:10}
-nav.tabs .in{max-width:720px;margin:0 auto;display:grid;grid-template-columns:repeat(6,1fr)}
+nav.tabs .in{max-width:720px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr)}
 nav.tabs a{display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 2px 12px;color:var(--muted);text-decoration:none;font-size:11.5px;font-weight:500}
 nav.tabs a svg{width:22px;height:22px}
 nav.tabs a[aria-current="page"]{color:var(--accent)}
@@ -113,6 +113,24 @@ nav.tabs a[aria-current="page"]{color:var(--accent)}
 .mrow .nm{grid-column:1/-1;display:flex;gap:8px;align-items:end}
 .mrow .nm label{flex:1}
 .mrow .yr{font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap;padding-bottom:9px}
+.wrap>*{min-width:0}
+.seg{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:2px 0;max-width:100%;min-width:0}
+.seg::-webkit-scrollbar{display:none}
+.seg a{flex:none;text-decoration:none;color:var(--ink);border:1px solid var(--axis);background:var(--surface);border-radius:999px;padding:7px 13px;font-size:13.5px;font-weight:500}
+.seg a[aria-current="page"]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.status{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.status div{display:flex;flex-direction:column;gap:2px;border:1px solid var(--line);border-radius:10px;padding:10px}
+.status b{font-family:var(--display);font-size:20px;color:var(--muted)}
+.status span{font-size:12px;color:var(--ink-2)}
+.act{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:9px 0;border-bottom:1px dashed var(--axis)}
+.act:last-child{border-bottom:0}
+.act input[type=checkbox]{width:20px;height:20px;accent-color:var(--accent)}
+.act .unit{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--ink-2)}
+.act .unit input,.act .unit select{width:76px}
+.act.off{opacity:.55}
+.need{font-size:11.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.days{display:flex;gap:4px;flex-wrap:wrap}
+.days button{padding:6px 0;width:40px;text-align:center}
 .callout{background:var(--accent-wash);border-radius:10px;padding:10px 12px;font-size:13.5px}
 hr{border:0;border-top:1px solid var(--line);margin:2px 0;width:100%}
 @media (prefers-reduced-motion:no-preference){.hbar .fill{transition:width .3s}}
@@ -125,7 +143,7 @@ hr{border:0;border-top:1px solid var(--line);margin:2px 0;width:100%}
     <span class="pill"><i></i>Car not connected yet</span>
   </header>
   <div id="banner"></div>
-  <main id="view" class="wrap" style="padding:0"></main>
+  <main id="view" class="wrap" style="padding:0;width:100%"></main>
 </div>
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="tip" role="tooltip"></div>
@@ -145,8 +163,15 @@ const DEFAULTS={
     supply:{kind:"flat",rate:9.5,other:9.5,periods:[]},
     delivery:{kind:"tod",rate:6,other:5.5,periods:[{label:"Overnight",from:0,to:6,rate:3.5},{label:"Peak",from:13,to:19,rate:12}]}},
   range:"30", theme:"system", payoffGoal:13000,
-  maint:{annual:15000,years:5,preset:"severe",gasName:"2020 Palisade",tesla:null,gas:null}
+  maint:{annual:15000,years:5,preset:"severe",gasName:"2020 Palisade",tesla:null,gas:null},
+  trips:[], mYear:null,
+  irs:[{from:"2025-01-01",c:70},{from:"2026-01-01",c:72.5},{from:"2026-07-01",c:76}],
+  car:{perm:"charging", workDays:[1,2,3,4,5],
+    routines:[{id:"r1",name:"Shipt mode",acts:{climate:{on:true,v:70},seat:{on:true,v:3},wheel:{on:true,v:0},defrost:{on:false,v:0},limit:{on:true,v:90}}}],
+    rules:{dayLimit:{on:true,work:90,other:80},warm:{on:false,time:"08:30",below:40,temp:70}},
+    alerts:{plug:{on:true,time:"21:00",pct:40},high:{on:true,pct:90,hrs:3},stopped:{on:true},drain:{on:true,pct:3},tire:{on:false,psi:3},unlocked:{on:true,min:10}}}
 };
+let tripEdit=null;
 /* Scheduled maintenance. Intervals follow the makers' schedules; costs are rough shop estimates to edit. */
 const M_TESLA=()=>[
   {name:"Tire rotation",miles:6250,months:0,cost:60},
@@ -165,7 +190,7 @@ const M_GAS=p=>[
   ].concat(p==="severe"?[{name:"Transmission fluid",miles:60000,months:0,cost:350}]:[]);
 let editId=null;
 let S=load();
-function fill(o){o.maint=Object.assign(structuredClone(DEFAULTS.maint),o.maint||{});if(!Array.isArray(o.maint.tesla))o.maint.tesla=M_TESLA();if(!Array.isArray(o.maint.gas))o.maint.gas=M_GAS(o.maint.preset);return o}
+function fill(o){o.car=Object.assign(structuredClone(DEFAULTS.car),o.car||{});if(!Array.isArray(o.trips))o.trips=[];if(!Array.isArray(o.irs))o.irs=structuredClone(DEFAULTS.irs);o.maint=Object.assign(structuredClone(DEFAULTS.maint),o.maint||{});if(!Array.isArray(o.maint.tesla))o.maint.tesla=M_TESLA();if(!Array.isArray(o.maint.gas))o.maint.gas=M_GAS(o.maint.preset);return o}
 function load(){try{const r=JSON.parse(localStorage.getItem(KEY));if(r&&r.vehicles)return fill(Object.assign(structuredClone(DEFAULTS),r))}catch(e){}return fill(structuredClone(DEFAULTS))}
 function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
 
@@ -273,6 +298,36 @@ function legAgg(ls){
   const mi=ls.reduce((a,l)=>a+l.mi,0),wall=ls.reduce((a,l)=>a+l.wall,0),c=ls.filter(l=>l.cost!=null),cm=c.reduce((a,l)=>a+l.mi,0),cc=c.reduce((a,l)=>a+l.cost,0);
   return {n:ls.length,mpge:wall?mi*KWH_GAL/wall:0,costMpg:cc?cm/cc*S.gasPrice:0};
 }
+/* ---------- mileage log ---------- */
+const irsRate=d=>{let r=0;[...S.irs].sort((a,b)=>a.from<b.from?-1:1).forEach(x=>{if(x.from<=d)r=+x.c||0});return r};
+const tripMiles=t=>Math.max(0,(+t.end||0)-(+t.start||0));
+const bizMiles=t=>t.purpose==="shipt"?tripMiles(t):t.purpose==="mixed"?Math.min(tripMiles(t),+t.work||0):0;
+const PURPOSES={shipt:"Shipt (all miles)",mixed:"Mixed",personal:"Personal"};
+function sampleTrips(){
+  let seed=77;const rnd=()=>(seed=(seed*1664525+1013904223)%4294967296)/4294967296;
+  const out=[];const d=new Date();d.setDate(d.getDate()-70);let odo=33510;
+  for(let i=0;i<70;i++){d.setDate(d.getDate()+1);if(d>new Date())break;const dow=d.getDay(),r=rnd();
+    if(dow===0&&r<.6)continue;
+    const purpose=dow>=1&&dow<=5?(r<.75?"shipt":"mixed"):(r<.5?"personal":"mixed"),mi=Math.round(purpose==="personal"?12+rnd()*30:45+rnd()*55);
+    out.push({id:"t"+i,date:iso(d),vehicle:"Model Y",start:odo,end:odo+mi,purpose,work:purpose==="mixed"?Math.round(mi*(.4+rnd()*.4)):0,note:purpose==="personal"?"":"Shipt orders"});odo+=mi+Math.round(rnd()*6)}
+  return out;
+}
+const SAMPLE_TRIPS=sampleTrips();
+const trips=()=>[...(S.useSample?SAMPLE_TRIPS:S.trips)].sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:(+a.start)-(+b.start));
+function lastOdo(){let m=0;S.trips.forEach(t=>{m=Math.max(m,+t.end||0)});S.sessions.forEach(s=>{m=Math.max(m,+s.odo||0)});return m}
+function csv(rows){return rows.map(r=>r.map(x=>{x=String(x??"");return /[",\n]/.test(x)?'"'+x.replace(/"/g,'""')+'"':x}).join(",")).join("\n")}
+function tripCsv(y){
+  const rows=[["Date","Vehicle","Start odometer","End odometer","Total miles","Business miles","Purpose","Note","IRS rate (cents)","Deduction ($)"]];
+  trips().filter(t=>t.date.startsWith(y)).forEach(t=>rows.push([t.date,t.vehicle,t.start,t.end,tripMiles(t),bizMiles(t),PURPOSES[t.purpose]||t.purpose,t.note||"",irsRate(t.date),(bizMiles(t)*irsRate(t.date)/100).toFixed(2)]));
+  return csv(rows);
+}
+/* ---------- car: what each action needs ---------- */
+const PERMS={data:"Data only",charging:"Data and charging",climate:"Data, charging and climate"};
+const RANK={data:0,charging:1,climate:2};
+const allowed=need=>RANK[S.car.perm]>=RANK[need];
+const ACTS=[{k:"climate",l:"Climate on",unit:"°F",min:60,max:85,need:"climate"},{k:"seat",l:"Driver seat heat",unit:"level",min:1,max:3,need:"climate"},
+  {k:"wheel",l:"Steering wheel heat",need:"climate"},{k:"defrost",l:"Defrost",need:"climate"},{k:"limit",l:"Charge limit",unit:"%",min:50,max:100,need:"charging"}];
+const DOW=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const monthName=k=>new Date(k+"-15T12:00").toLocaleDateString(undefined,{month:"short",year:"numeric"});
 const veh=()=>S.vehicles.find(v=>v.id===S.activeVehicle)||S.vehicles[0];
 
@@ -389,7 +444,7 @@ function vCharging(){
       <label class="f">Place<select id="f-type">${Object.keys(TYPES).map(k=>`<option value="${k}"${k===fv("type","home")?" selected":""}>${TYPES[k].label}</option>`).join("")}</select></label>
       <label class="f">kWh added<input id="f-kwh" type="number" step="0.1" min="0" inputmode="decimal" value="${fv("kwh")}" required></label>
       <label class="f">Cost in $ (blank = use rates)<input id="f-cost" type="number" step="0.01" min="0" inputmode="decimal" value="${fv("cost")}"></label>
-      <label class="f">Odometer<input id="f-odo" type="number" step="1" min="0" inputmode="numeric" value="${fv("odo")}"></label>
+      <label class="f">Odometer<input id="f-odo" type="number" step="1" min="0" inputmode="numeric" value="${fv("odo")}"${!ed&&lastOdo()?` placeholder="Last: ${lastOdo()}"`:""}></label>
       <label class="f">Battery % at start<input id="f-start" type="number" min="0" max="100" inputmode="numeric" value="${fv("startPct")}"></label>
       <label class="f">Battery % at end<input id="f-end" type="number" min="0" max="100" inputmode="numeric" value="${fv("endPct")}"></label>
       <div class="row" style="align-items:end"><button class="primary" type="submit">${ed?"Save changes":"Save session"}</button>${ed?'<button type="button" data-act="cancelEdit">Cancel</button>':""}</div>
@@ -508,6 +563,90 @@ function vService(){
   ${mList("tesla","Model Y schedule")}
   ${mList("gas",M.gasName+" schedule",`<div class="row"><span class="sub">Start from Hyundai's:</span><div class="chips"><button data-act="mpreset" data-v="normal" aria-pressed="${M.preset==="normal"}">Normal schedule</button><button data-act="mpreset" data-v="severe" aria-pressed="${M.preset==="severe"}">Severe schedule</button></div></div><p class="note">Severe applies to mostly short trips and stop-and-go driving, which fits delivery work. Picking one replaces the list below.</p>`)}`;
 }
+function vMileage(){
+  const all=trips(),years=[...new Set(all.map(t=>t.date.slice(0,4)).concat(String(new Date().getFullYear())))].sort().reverse();
+  const y=years.includes(S.mYear)?S.mYear:years[0],list=all.filter(t=>t.date.startsWith(y));
+  const tot=list.reduce((a,t)=>a+tripMiles(t),0),biz=list.reduce((a,t)=>a+bizMiles(t),0),ded=list.reduce((a,t)=>a+bizMiles(t)*irsRate(t.date)/100,0);
+  const months={};list.forEach(t=>{const k=t.date.slice(0,7),m=months[k]||(months[k]={t:0,b:0,d:0});m.t+=tripMiles(t);m.b+=bizMiles(t);m.d+=bizMiles(t)*irsRate(t.date)/100});
+  const ed=S.useSample?null:S.trips.find(t=>t.id===tripEdit)||null,fv=(k,d="")=>ed&&ed[k]!=null?ed[k]:d,lo=lastOdo(),today=iso(new Date());
+  const vnames=["Model Y",...S.vehicles.map(v=>v.name)].filter((v,i,a)=>a.indexOf(v)===i);
+  return `
+  <section class="card">
+    <div class="chips" role="group" aria-label="Tax year">${years.map(x=>`<button data-act="myear" data-v="${x}" aria-pressed="${x===y}">${x}</button>`).join("")}</div>
+    <div class="hero"><span class="label">Estimated mileage deduction for ${y}</span><span class="fig good">${$0(ded)}</span></div>
+    <div class="tiles">
+      <div class="tile"><b>${n0(biz)}</b><span>business miles</span></div>
+      <div class="tile"><b>${n0(tot-biz)}</b><span>personal miles</span></div>
+      <div class="tile"><b>${n0(tot)}</b><span>total miles logged</span></div>
+      <div class="tile"><b>${tot?Math.round(biz/tot*100):0}%</b><span>business share</span></div>
+    </div>
+    <p class="note">Uses the IRS standard mileage rate for each date (set in Settings). This is an estimate, not tax advice. The IRS expects a log kept as you go, with the date, miles and business purpose of each trip.</p>
+  </section>
+  <section class="card" id="tripCard"><h2>${ed?"Edit this day":"Log a day"}</h2>
+    ${S.useSample?'<p class="sub">You are looking at sample data. Logging a day switches to your own log.</p>':""}
+    <form id="tripForm" class="grid2 grid3">
+      <label class="f">Date<input id="t-date" type="date" value="${esc(fv("date",today))}" required></label>
+      <label class="f">Vehicle<select id="t-veh">${vnames.map(n=>`<option${n===fv("vehicle","Model Y")?" selected":""}>${esc(n)}</option>`).join("")}</select></label>
+      <label class="f">Purpose<select id="t-purpose">${Object.keys(PURPOSES).map(k=>`<option value="${k}"${k===fv("purpose","shipt")?" selected":""}>${PURPOSES[k]}</option>`).join("")}</select></label>
+      <label class="f">Start odometer<input id="t-start" type="number" min="0" step="1" inputmode="numeric" value="${fv("start",ed?"":(lo||""))}" required></label>
+      <label class="f">End odometer<input id="t-end" type="number" min="0" step="1" inputmode="numeric" value="${fv("end")}" required></label>
+      <label class="f">Business miles, if mixed<input id="t-work" type="number" min="0" step="1" inputmode="numeric" value="${fv("work")}"${fv("purpose","shipt")==="mixed"?"":" disabled"}></label>
+      <label class="f" style="grid-column:1/-1">Note<input id="t-note" value="${esc(fv("note"))}" placeholder="For example: Shipt orders, Jewel and Mariano's"></label>
+      <div class="row"><button class="primary" type="submit">${ed?"Save changes":"Save day"}</button>${ed?'<button type="button" data-act="tcancel">Cancel</button>':""}<span id="tmsg" class="sub" role="status"></span></div>
+    </form>
+    ${!ed&&lo?`<p class="note">Start odometer is filled in from your last reading, ${n0(lo)}.</p>`:""}
+  </section>
+  <section class="card"><h2>${y} by month</h2><div class="scroll"><table><thead><tr><th>Month</th><th>Total</th><th>Business</th><th>Deduction</th></tr></thead><tbody>
+    ${Object.keys(months).sort().reverse().map(k=>`<tr><td>${monthName(k)}</td><td>${n0(months[k].t)}</td><td>${n0(months[k].b)}</td><td><b>${$0(months[k].d)}</b></td></tr>`).join("")||'<tr><td colspan="4">Nothing logged for this year yet.</td></tr>'}
+    </tbody></table></div>
+    <div class="row"><button data-act="csvdl" data-v="${y}">Download ${y} as CSV</button><button data-act="csvcp" data-v="${y}">Copy as CSV</button><span id="cmsg" class="sub" role="status"></span></div>
+  </section>
+  <section class="card"><h2>Days logged</h2><div>
+    ${[...list].reverse().slice(0,60).map(t=>`<div class="sess"><div class="a"><b>${fmtD(t.date)} · ${esc(PURPOSES[t.purpose]||t.purpose)}</b>
+      <span>${n0(t.start)} to ${n0(t.end)} · ${n0(tripMiles(t))} mi${t.purpose==="mixed"?`, ${n0(bizMiles(t))} business`:""} · ${esc(t.vehicle)}${t.note?" · "+esc(t.note):""}</span></div>
+      <div class="b"><b>${$2(bizMiles(t)*irsRate(t.date)/100)}</b>${S.useSample?"":`<br><button class="quiet" data-act="tedit" data-v="${esc(t.id)}">Edit</button><button class="quiet" data-act="tdel" data-v="${esc(t.id)}">Delete</button>`}</div></div>`).join("")||'<p class="sub">Nothing logged for this year yet.</p>'}
+  </div></section>`;
+}
+
+function needTag(need){return allowed(need)?"":`<span class="need">Needs ${need} permission</span>`}
+function vCar(){
+  const C=S.car;
+  const num=(path,val,min,max,step=1)=>`<input type="number" data-cp="${path}" value="${val}" min="${min}" max="${max}" step="${step}" inputmode="numeric">`;
+  const chk=(path,on,label)=>`<input type="checkbox" data-cp="${path}" ${on?"checked":""} aria-label="${esc(label)}">`;
+  return `
+  <section class="card"><h2>Car status</h2>
+    <div class="status">${[["Battery"],["Range"],["Charging"],["Doors"],["Inside"],["Outside"]].map(([l])=>`<div><b>–</b><span>${l}</span></div>`).join("")}</div>
+    <p class="note">Live status shows here once the car is connected.</p>
+  </section>
+  <section class="card"><h2>What this app may control</h2>
+    <div class="chips" role="group" aria-label="Permission level">${Object.keys(PERMS).map(k=>`<button data-act="perm" data-v="${k}" aria-pressed="${C.perm===k}">${PERMS[k]}</button>`).join("")}</div>
+    <p class="sub">${C.perm==="climate"?"<b>Climate uses Tesla's general vehicle commands permission, which also allows unlock and remote start.</b> Tesla does not offer a climate-only permission, so a leak of the app's key and token could open the car.":C.perm==="charging"?"Charging limits and start or stop only. A leak could change charge settings but could not unlock or move the car.":"Read-only. Alerts and status work; routines and rules cannot change anything."}</p>
+    <p class="note">This records your choice for when the Tesla app access is set up. Items below that need more are dimmed.</p>
+  </section>
+  ${C.routines.map((r,ri)=>`<section class="card"><div class="row" style="justify-content:space-between"><label class="f" style="flex:1 1 160px">Routine name<input data-cp="routines.${ri}.name" value="${esc(r.name)}"></label>${C.routines.length>1?`<button class="quiet" data-act="rdel" data-v="${ri}">Remove</button>`:""}</div>
+    <div>${ACTS.map(a=>{const x=r.acts[a.k]||{on:false,v:a.min||0};return `<div class="act${allowed(a.need)?"":" off"}">${chk(`routines.${ri}.acts.${a.k}.on`,x.on,a.l)}<span>${a.l}<br>${needTag(a.need)}</span>
+      <span class="unit">${a.unit?`${num(`routines.${ri}.acts.${a.k}.v`,x.v,a.min,a.max)}${a.unit}`:""}</span></div>`}).join("")}</div>
+    <div class="row"><button class="primary" data-act="run" data-v="${ri}">Run ${esc(r.name)}</button><span class="sub" id="run-${ri}" role="status"></span></div>
+  </section>`).join("")}
+  <div class="row"><button data-act="radd">Add a routine</button></div>
+  <section class="card"><h2>Rules</h2>
+    <p class="sub">Work days</p>
+    <div class="days" role="group" aria-label="Work days">${DOW.map((d,i)=>`<button data-act="wday" data-v="${i}" aria-pressed="${C.workDays.includes(i)}">${d}</button>`).join("")}</div>
+    <div class="act${allowed("charging")?"":" off"}">${chk("rules.dayLimit.on",C.rules.dayLimit.on,"Charge limit by day")}<span>Charge to ${num("rules.dayLimit.work",C.rules.dayLimit.work,50,100)}% the night before a work day, ${num("rules.dayLimit.other",C.rules.dayLimit.other,50,100)}% otherwise<br>${needTag("charging")}</span><span></span></div>
+    <div class="act${allowed("climate")?"":" off"}">${chk("rules.warm.on",C.rules.warm.on,"Cold-morning warm-up")}<span>On work days at <input type="time" data-cp="rules.warm.time" value="${esc(C.rules.warm.time)}" style="width:auto">, if it is below ${num("rules.warm.below",C.rules.warm.below,-20,60)}°F outside, warm the cabin to ${num("rules.warm.temp",C.rules.warm.temp,60,85)}°F<br>${needTag("climate")}</span><span></span></div>
+  </section>
+  <section class="card"><h2>Alerts</h2>
+    ${[["unlocked",`Left unlocked for ${num("alerts.unlocked.min",C.alerts.unlocked.min,1,120)} minutes`],
+       ["plug",`Not plugged in by <input type="time" data-cp="alerts.plug.time" value="${esc(C.alerts.plug.time)}" style="width:auto"> with the battery under ${num("alerts.plug.pct",C.alerts.plug.pct,5,100)}%`],
+       ["high",`Sitting above ${num("alerts.high.pct",C.alerts.high.pct,50,100)}% for more than ${num("alerts.high.hrs",C.alerts.high.hrs,1,48)} hours`],
+       ["stopped","Charging stopped before reaching the limit"],
+       ["drain",`Lost more than ${num("alerts.drain.pct",C.alerts.drain.pct,1,20)}% overnight while parked`],
+       ["tire",`A tire dropped ${num("alerts.tire.psi",C.alerts.tire.psi,1,10)} psi or more in a week`]
+      ].map(([k,l])=>`<div class="act">${chk(`alerts.${k}.on`,C.alerts[k].on,k)}<span>${l}</span><span></span></div>`).join("")}
+    <p class="note">Alerts only read data, so they work at every permission level. How they reach your phone gets set up with the Worker.</p>
+  </section>
+  <p class="note" style="padding:0 4px">Everything on this screen is saved now and starts working once the car and the Worker are connected.</p>`;
+}
 function vSetup(){
   return `
   <section class="card"><h2>Appearance</h2>
@@ -518,6 +657,11 @@ function vSetup(){
     <div class="row"><button data-act="vadd">Add a vehicle</button></div>
     <div class="grid2"><label class="f">Gas price, $ per gallon<input type="number" step="0.01" data-top="gasPrice" value="${S.gasPrice}"></label>
     <label class="f">Gap to pay back with fuel savings, $ (0 hides it)<input type="number" step="100" min="0" data-top="payoffGoal" value="${S.payoffGoal}"></label></div>
+  </section>
+  <section class="card"><h2>IRS mileage rates</h2>
+    ${S.irs.map((r,i)=>`<div class="row"><label class="f" style="flex:1 1 140px">Starting<input type="date" data-irs="${i}.from" value="${esc(r.from)}"></label><label class="f" style="flex:1 1 100px">Cents per mile<input type="number" step="0.5" data-irs="${i}.c" value="${r.c}"></label><button class="quiet" data-act="irsdel" data-v="${i}">Remove</button></div>`).join("")}
+    <div class="row"><button data-act="irsadd">Add a rate</button></div>
+    <p class="note">The IRS business rate for 2026 was 72.5 cents from January and 76 cents from July 1.</p>
   </section>
   <section class="card"><h2>Car and charger</h2>
     <div class="grid2">
@@ -535,19 +679,21 @@ function vSetup(){
     <label class="f">Paste data here to load it<textarea id="xbox" rows="3" spellcheck="false"></textarea></label>
   </section>
   <section class="card"><h2>Connecting the car</h2>
-    <p class="sub">Not connected. Sessions are typed in by hand for now. Once the Tesla developer app, the public key and the Cloudflare Worker are set up, charges and odometer readings will fill in automatically and the family can share one log.</p>
+    <p class="sub">Not connected. Sessions and mileage are typed in by hand for now. Once the Tesla developer app, the public key and the Cloudflare Worker are set up, charges and odometer readings will fill in automatically and the family can share one log.</p>
   </section>`;
 }
 
 /* ---------- shell ---------- */
-const TABS=[["savings","Savings","M4 18l5-6 4 3 7-9"],["charging","Charging","M13 3L5 13h6l-1 8 8-11h-6z"],["rates","Rates","M4 20V10M10 20V4M16 20v-7M22 20H2"],["battery","Battery","M3 8h16v8H3zM21 11v2"],["service","Service","M14.5 5.5a4 4 0 0 0 4 4l1.5-1.5a5.5 5.5 0 0 1-7.2 5.3L7 19a2 2 0 0 1-3-3l5.7-5.8A5.5 5.5 0 0 1 15 3z"],["setup","Setup","M4 7h16M4 12h16M4 17h16"]];
-const VIEWS={savings:vSavings,charging:vCharging,rates:vRates,battery:vBattery,service:vService,setup:vSetup};
+const SECTIONS=[["car","Car","M5 17h14M6 17v2M18 17v2M3 13l2.5-6h13L21 13v4H3zM7 13h.01M17 13h.01"],["savings","Insights","M4 18l5-6 4 3 7-9"],["mileage","Mileage","M4 20 9 4M20 20 15 4M12 6v2M12 11v2M12 16v2"],["setup","Settings","M4 7h16M4 12h16M4 17h16"]];
+const INSIGHTS=[["savings","Savings"],["charging","Charging"],["battery","Battery"],["service","Service"],["rates","Rates"]];
+const VIEWS={car:vCar,savings:vSavings,charging:vCharging,battery:vBattery,service:vService,rates:vRates,mileage:vMileage,setup:vSetup};
 const cur=()=>{const h=location.hash.slice(1);return VIEWS[h]?h:"savings"};
 function render(){
-  const c=cur();
-  document.getElementById("tabs").innerHTML=TABS.map(([k,l,d])=>`<a href="#${k}" ${k===c?'aria-current="page"':""}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>${l}</a>`).join("");
-  document.getElementById("banner").innerHTML=S.useSample?`<div class="banner"><span><b>Sample data.</b> These numbers are made up to show how the app works.</span><button data-act="sample">Use my own data</button></div>`:"";
-  document.getElementById("view").innerHTML=VIEWS[c]();
+  const c=cur(),sec=INSIGHTS.some(x=>x[0]===c)?"savings":c;
+  document.getElementById("tabs").innerHTML=SECTIONS.map(([k,l,d])=>`<a href="#${k}" ${k===sec?'aria-current="page"':""}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>${l}</a>`).join("");
+  document.getElementById("banner").innerHTML=S.useSample&&c!=="car"&&c!=="setup"?`<div class="banner"><span><b>Sample data.</b> These numbers are made up to show how the app works.</span><button data-act="sample">Use my own data</button></div>`:"";
+  const seg=sec==="savings"?`<nav class="seg" aria-label="Insights">${INSIGHTS.map(([k,l])=>`<a href="#${k}" ${k===c?'aria-current="page"':""}>${l}</a>`).join("")}</nav>`:"";
+  document.getElementById("view").innerHTML=seg+VIEWS[c]();
 }
 function setPath(obj,path,val){const k=path.split(".");let o=obj;for(let i=0;i<k.length-1;i++)o=o[k[i]];const last=k[k.length-1];o[last]=(last==="label"||last==="name")?val:(val===""?0:+val)}
 
@@ -570,6 +716,19 @@ document.addEventListener("click",e=>{
   else if(a==="madd")S.maint[k].push({name:"New service",miles:10000,months:0,cost:100});
   else if(a==="mdel")S.maint[k].splice(+v,1);
   else if(a==="mpreset"){S.maint.preset=v;S.maint.gas=M_GAS(v)}
+  else if(a==="myear")S.mYear=v;
+  else if(a==="tedit"){tripEdit=v;render();const f=document.getElementById("tripCard");if(f)f.scrollIntoView({block:"start"});return}
+  else if(a==="tcancel")tripEdit=null;
+  else if(a==="tdel"){S.trips=S.trips.filter(t=>t.id!==v);if(tripEdit===v)tripEdit=null}
+  else if(a==="csvdl"){const m=document.getElementById("cmsg");try{const u=URL.createObjectURL(new Blob([tripCsv(v)],{type:"text/csv"})),l=document.createElement("a");l.href=u;l.download=`mileage-${v}.csv`;document.body.appendChild(l);l.click();l.remove();setTimeout(()=>URL.revokeObjectURL(u),2000);m.textContent="If nothing downloaded, use Copy as CSV."}catch(_){m.textContent="Download is not available here. Use Copy as CSV."}return}
+  else if(a==="csvcp"){const m=document.getElementById("cmsg"),t=tripCsv(v);(navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>m.textContent="Copied. Paste it into a spreadsheet.",()=>m.textContent="Copying is blocked here. Use Download instead.");return}
+  else if(a==="irsadd")S.irs.push({from:iso(new Date()),c:S.irs.length?S.irs[S.irs.length-1].c:72.5});
+  else if(a==="irsdel")S.irs.splice(+v,1);
+  else if(a==="perm")S.car.perm=v;
+  else if(a==="wday"){const d=+v,w=S.car.workDays;S.car.workDays=w.includes(d)?w.filter(x=>x!==d):[...w,d].sort()}
+  else if(a==="radd")S.car.routines.push({id:"r"+Date.now(),name:"New routine",acts:{climate:{on:false,v:70},seat:{on:false,v:3},wheel:{on:false,v:0},defrost:{on:false,v:0},limit:{on:false,v:80}}});
+  else if(a==="rdel")S.car.routines.splice(+v,1);
+  else if(a==="run"){const m=document.getElementById("run-"+v);if(m)m.textContent="Routines run once the car is connected.";return}
   else if(a==="export"){const t=JSON.stringify(S);const box=document.getElementById("xbox"),msg=document.getElementById("xmsg");box.value=t;
     (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>msg.textContent="Copied.",()=>{box.select();msg.textContent="Copy the text in the box below."});return}
   else if(a==="import"){const msg=document.getElementById("xmsg");try{const r=JSON.parse(document.getElementById("xbox").value);if(!r||!Array.isArray(r.vehicles)||!Array.isArray(r.sessions))throw 0;S=fill(Object.assign(structuredClone(DEFAULTS),r));save();applyTheme();render();document.getElementById("xmsg").textContent="Loaded."}catch(_){msg.textContent="That text is not Tesla Ledger data. Copy it again from the other phone and paste the whole thing."}return}
@@ -581,11 +740,22 @@ document.addEventListener("change",e=>{
   else if(t.dataset.top){S[t.dataset.top]=+t.value||0}
   else if(t.dataset.m){setPath(S.maint,t.dataset.m,t.value)}
   else if(t.dataset.maint){S.maint[t.dataset.maint]=Math.max(1,+t.value||0)}
+  else if(t.dataset.irs){const [i,f]=t.dataset.irs.split(".");S.irs[+i][f]=f==="from"?t.value:(+t.value||0)}
+  else if(t.dataset.cp){const k=t.dataset.cp.split(".");let o=S.car;for(let i=0;i<k.length-1;i++)o=o[k[i]];const last=k[k.length-1];
+    o[last]=t.type==="checkbox"?t.checked:(t.type==="time"||last==="name")?t.value:(+t.value||0)}
+  else if(t.id==="t-purpose"){const w=document.getElementById("t-work");if(w)w.disabled=t.value!=="mixed";return}
   else if(t.dataset.veh){setPath(S.vehicles,t.dataset.veh,t.value);if(t.dataset.veh.endsWith("mpg")){const i=+t.dataset.veh.split(".")[0];S.vehicles[i].mpg=Math.max(1,S.vehicles[i].mpg)}}
   else return;
   save();render();
 });
 document.addEventListener("submit",e=>{
+  if(e.target.id==="tripForm"){e.preventDefault();const g=id=>document.getElementById(id).value,m=document.getElementById("tmsg");
+    const rec={date:g("t-date"),vehicle:g("t-veh"),purpose:g("t-purpose"),start:+g("t-start"),end:+g("t-end"),work:g("t-purpose")==="mixed"?+g("t-work")||0:0,note:g("t-note").trim()};
+    if(!(rec.end>rec.start)){m.textContent="End odometer needs to be higher than the start.";return}
+    if(rec.purpose==="mixed"&&rec.work>rec.end-rec.start){m.textContent="Business miles can't be more than the day's total.";return}
+    const old=S.useSample?null:S.trips.find(t=>t.id===tripEdit);
+    if(old)Object.assign(old,rec);else S.trips.push(Object.assign({id:"m"+Date.now()},rec));
+    tripEdit=null;S.useSample=false;S.mYear=rec.date.slice(0,4);save();render();return}
   if(e.target.id!=="addForm")return;e.preventDefault();const g=id=>document.getElementById(id).value;
   const num=x=>x===""?null:+x;
   const rec={date:g("f-date"),hour:+g("f-hour"),type:g("f-type"),kwh:+g("f-kwh"),cost:num(g("f-cost")),odo:num(g("f-odo")),startPct:num(g("f-start")),endPct:num(g("f-end"))};
